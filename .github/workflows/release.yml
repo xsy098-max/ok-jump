@@ -1,0 +1,67 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        platform: [windows-latest]
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build with PyAppify Action
+        id: build-app
+        uses: ok-oldking/pyappify-action@master
+        with:
+          version: 'v0.1.0'
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        with:
+          tag_name: ${{ steps.get_version.outputs.VERSION }}
+          name: Release ${{ steps.get_version.outputs.VERSION }}
+          body: |
+            ## ok-jump Release ${{ steps.get_version.outputs.VERSION }}
+
+            ### 下载说明
+            - **China**: 标准版本，使用国内镜像源加速下载
+            - **Debug**: 调试版本，启用调试模式
+
+            ### 更新内容
+            请查看下方自动生成的更新日志
+
+            ### 安装说明
+            1. 下载对应版本的 zip 文件
+            2. 解压到任意目录
+            3. 运行 `ok-jump.exe` 启动程序
+          files: pyappify_dist/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
