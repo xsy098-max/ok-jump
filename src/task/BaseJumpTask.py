@@ -29,6 +29,32 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
         self.name = "BaseJumpTask"
         self.description = "漫画群星任务基类"
         self._logged_in = False
+        # 调用上下文（用于任务被其他任务调用时的状态管理）
+        self._caller_task = None  # 调用者任务引用
+        self._is_standalone = True  # 是否单独运行（默认True）
+
+    def set_caller(self, caller_task):
+        """
+        设置调用者任务（由其他任务调用时使用）
+
+        当任务被其他任务模块调用时，应调用此方法标记调用关系。
+        这会影响任务完成后的行为（如自动登录任务是否主动结束）。
+
+        Args:
+            caller_task: 调用者任务实例
+        """
+        self._caller_task = caller_task
+        self._is_standalone = False
+
+    @property
+    def is_standalone(self) -> bool:
+        """
+        是否单独运行
+
+        Returns:
+            bool: True 表示任务由用户直接启动，False 表示被其他任务调用
+        """
+        return self._is_standalone
 
     # ==================== 截图功能 ====================
 
@@ -183,6 +209,7 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
 
         texts = self.ocr()
         if texts:
+            # 使用 find_boxes 方法，它会自动调用 _convert_match_for_lang 进行简繁转换
             enter_texts = self.find_boxes(texts, match=re.compile(r"进入游戏"))
             if enter_texts:
                 self.log_info("OCR找到'进入游戏'")
@@ -254,13 +281,14 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
         """
         根据游戏文本语言转换匹配模式
 
-        当游戏设置为繁体中文时，自动将简体中文匹配模式转换为繁体中文。
+        当游戏设置为繁体中文时，将正则表达式转换为同时匹配简体和繁体中文。
+        例如：'适龄提示' -> '适龄提示|適齡提示'
 
         Args:
             match: 原始匹配模式
 
         Returns:
-            转换后的匹配模式
+            转换后的匹配模式（双语模式）
         """
         if match is None:
             return match
@@ -269,13 +297,14 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
         if not self._is_traditional_chinese():
             return match
 
-        # 转换为繁体中文
+        # 转换为双语模式（同时匹配简体和繁体）
         if isinstance(match, re.Pattern):
-            converted = LangConverter.convert_regex_pattern(match, True)
-            self.log_info(f"正则转换: '{match.pattern}' -> '{converted.pattern}'")
-            return converted
+            # 创建双语模式
+            bilingual = LangConverter.create_bilingual_regex(match)
+            self.log_info(f"正则转换: '{match.pattern}' -> '{bilingual.pattern}'")
+            return bilingual
         elif isinstance(match, str):
-            converted = LangConverter.simplify_to_traditional(match)
+            converted = LangConverter.create_bilingual_pattern(match)
             self.log_info(f"字符串转换: '{match}' -> '{converted}'")
             return converted
         elif isinstance(match, list):
