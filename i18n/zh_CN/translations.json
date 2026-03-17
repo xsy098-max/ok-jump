@@ -1,0 +1,75 @@
+{
+    "MainWindowTask": {
+        "name": "主窗口",
+        "description": "功能开发索引与核心测试"
+    },
+    "AutoLoginTask": {
+        "name": "自动登录",
+        "description": "自动启动游戏并登录"
+    },
+    "AutoTutorialTask": {
+        "name": "自动新手引导",
+        "description": "自动完成游戏新手教程"
+    },
+    "AutoMatchTask": {
+        "name": "自动匹配",
+        "description": "自动开始游戏匹配"
+    },
+    "AutoCombatTask": {
+        "name": "自动战斗",
+        "description": "自动释放技能和攻击"
+    },
+    "DailyTask": {
+        "name": "日常任务",
+        "description": "自动完成每日任务"
+    },
+    "Basic Options": {
+        "name": "基础选项"
+    },
+    "Game Hotkey Config": {
+        "name": "游戏热键配置"
+    },
+    "Core Features": "核心功能",
+    "Game Features": "游戏功能",
+    "MOBA Features": "MOBA功能",
+    "Utility Tools": "实用工具",
+    "WindowCapture": "窗口识别与截图",
+    "ResolutionAdapter": "自适应分辨率",
+    "CocoManager": "COCO图片匹配素材管理",
+    "BackgroundMode": "后台模式",
+    "AutoLogin": "自动登录",
+    "AutoMatch": "自动匹配",
+    "AutoCombat": "自动战斗",
+    "AutoSkill": "技能释放",
+    "LaneControl": "对线控制",
+    "JunglePath": "打野路线",
+    "TeamFight": "团战辅助",
+    "TowerPush": "推塔策略",
+    "DailyTask": "日常任务",
+    "ResourceCollector": "资源收集",
+    "EventHelper": "活动辅助",
+    "Enabled": "启用",
+    "Auto Attack": "自动普攻",
+    "Auto Skill1": "自动技能1",
+    "Auto Skill2": "自动技能2",
+    "Auto Ultimate": "自动大招",
+    "Attack Interval": "普攻间隔(秒)",
+    "Skill1 Interval": "技能1间隔(秒)",
+    "Skill2 Interval": "技能2间隔(秒)",
+    "Ultimate Interval": "大招间隔(秒)",
+    "Game Mode": "游戏模式",
+    "Auto Accept": "自动接受匹配",
+    "Max Wait Time": "最大等待时间(秒)",
+    "Complete Daily Quests": "完成日常任务",
+    "Collect Rewards": "收集奖励",
+    "Use Stamina": "使用体力",
+    "Stamina Threshold": "体力阈值",
+    "Auto Start Game": "自动启动游戏",
+    "Wait For Game": "等待游戏启动(秒)",
+    "Max Login Attempts": "最大登录尝试次数",
+    "Auto Skip Dialog": "自动跳过对话",
+    "Auto Click Guide": "自动点击引导",
+    "Auto Tutorial Combat": "自动完成教学战斗",
+    "Dialog Wait Time": "对话等待时间(秒)",
+    "Click Interval": "点击间隔(秒)"
+}

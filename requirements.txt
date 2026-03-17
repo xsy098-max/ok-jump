@@ -1,0 +1,13 @@
+ok-script>=1.0.0
+PySide6-Essentials>=6.7.0
+PySide6-Fluent-Widgets>=1.5.5
+opencv-python>=4.9.0.80
+numpy>=1.26.4
+adbutils>=2.2.1
+pywin32>=306
+psutil>=6.0.0
+pydirectinput==1.0.4
+onnxruntime>=1.16.0
+onnxruntime-directml>=1.16.0
+pyperclip>=1.8.2
+opencc>=1.1.0

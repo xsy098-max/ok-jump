@@ -1,0 +1,383 @@
+{
+    "images": [
+        {
+            "id": 0,
+            "file_name": "images/login/login0_sc.png",
+            "height": 621,
+            "width": 1387
+        },
+        {
+            "id": 1,
+            "file_name": "images/login/login1_sc.png",
+            "height": 600,
+            "width": 1200
+        },
+        {
+            "id": 2,
+            "file_name": "images/login/login3_sc.png",
+            "height": 624,
+            "width": 1387
+        },
+        {
+            "id": 3,
+            "file_name": "images/login/renzhen01.png",
+            "height": 32,
+            "width": 32
+        },
+        {
+            "id": 4,
+            "file_name": "images/login/renzhen02.png",
+            "height": 32,
+            "width": 32
+        },
+        {
+            "id": 5,
+            "file_name": "images/login/success_enter.png",
+            "height": 1080,
+            "width": 1920
+        },
+        {
+            "id": 6,
+            "file_name": "images/login/wenjuan_enter.png",
+            "height": 1080,
+            "width": 1920
+        },
+        {
+            "id": 7,
+            "file_name": "images/login/wenjuan_end.png",
+            "height": 100,
+            "width": 200
+        },
+        {
+            "id": 8,
+            "file_name": "images/login/wenjuan1.png",
+            "height": 50,
+            "width": 300
+        },
+        {
+            "id": 9,
+            "file_name": "images/login/wenjuan2.png",
+            "height": 50,
+            "width": 300
+        },
+        {
+            "id": 10,
+            "file_name": "images/login/wenjuan3.png",
+            "height": 50,
+            "width": 300
+        },
+        {
+            "id": 11,
+            "file_name": "images/login/wenjuan_sub.png",
+            "height": 50,
+            "width": 100
+        },
+        {
+            "id": 12,
+            "file_name": "images/login/wenjuan_end2.png",
+            "height": 100,
+            "width": 400
+        },
+        {
+            "id": 13,
+            "file_name": "images/login/xuanren.png",
+            "height": 100,
+            "width": 500
+        }
+    ],
+    "categories": [
+        {
+            "id": 1,
+            "name": "ui_elements",
+            "supercategory": "ui"
+        },
+        {
+            "id": 10,
+            "name": "login_ui",
+            "supercategory": "ui"
+        },
+        {
+            "id": 100,
+            "name": "enter_game_button",
+            "supercategory": "login_ui"
+        },
+        {
+            "id": 101,
+            "name": "start_game_button",
+            "supercategory": "login_ui"
+        },
+        {
+            "id": 102,
+            "name": "login_button",
+            "supercategory": "login_ui"
+        },
+        {
+            "id": 103,
+            "name": "login_screen_0_indicator",
+            "supercategory": "login_ui"
+        },
+        {
+            "id": 104,
+            "name": "login_screen_1_indicator",
+            "supercategory": "login_ui"
+        },
+        {
+            "id": 105,
+            "name": "login_screen_2_indicator",
+            "supercategory": "login_ui"
+        },
+        {
+            "id": 106,
+            "name": "age_prompt_text",
+            "supercategory": "login_ui"
+        },
+        {
+            "id": 107,
+            "name": "agree_text",
+            "supercategory": "login_ui"
+        },
+        {
+            "id": 108,
+            "name": "account_name_text",
+            "supercategory": "login_ui"
+        },
+        {
+            "id": 109,
+            "name": "change_server_text",
+            "supercategory": "login_ui"
+        },
+        {
+            "id": 110,
+            "name": "renzhen01",
+            "supercategory": "login_ui"
+        },
+        {
+            "id": 111,
+            "name": "renzhen02",
+            "supercategory": "login_ui"
+        },
+        {
+            "id": 112,
+            "name": "success_enter",
+            "supercategory": "login_ui"
+        },
+        {
+            "id": 113,
+            "name": "wenjuan_enter",
+            "supercategory": "login_ui"
+        },
+        {
+            "id": 114,
+            "name": "wenjuan_end",
+            "supercategory": "login_ui"
+        },
+        {
+            "id": 115,
+            "name": "wenjuan1",
+            "supercategory": "login_ui"
+        },
+        {
+            "id": 116,
+            "name": "wenjuan2",
+            "supercategory": "login_ui"
+        },
+        {
+            "id": 117,
+            "name": "wenjuan3",
+            "supercategory": "login_ui"
+        },
+        {
+            "id": 118,
+            "name": "wenjuan_sub",
+            "supercategory": "login_ui"
+        },
+        {
+            "id": 119,
+            "name": "wenjuan_end2",
+            "supercategory": "login_ui"
+        },
+        {
+            "id": 120,
+            "name": "xuanren",
+            "supercategory": "login_ui"
+        },
+        {
+            "id": 200,
+            "name": "main_menu_start",
+            "supercategory": "ui"
+        },
+        {
+            "id": 201,
+            "name": "lobby_indicator",
+            "supercategory": "ui"
+        },
+        {
+            "id": 202,
+            "name": "in_game_indicator",
+            "supercategory": "ui"
+        },
+        {
+            "id": 203,
+            "name": "in_game_hud",
+            "supercategory": "ui"
+        },
+        {
+            "id": 204,
+            "name": "loading_indicator",
+            "supercategory": "ui"
+        },
+        {
+            "id": 205,
+            "name": "hero_select_confirm",
+            "supercategory": "ui"
+        },
+        {
+            "id": 206,
+            "name": "result_victory",
+            "supercategory": "ui"
+        },
+        {
+            "id": 207,
+            "name": "result_defeat",
+            "supercategory": "ui"
+        }
+    ],
+    "annotations": [
+        {
+            "id": 0,
+            "image_id": 0,
+            "category_id": 100,
+            "bbox": [580, 520, 222, 32],
+            "area": 7104.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 1,
+            "image_id": 0,
+            "category_id": 103,
+            "bbox": [0, 0, 1387, 621],
+            "area": 861327.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 2,
+            "image_id": 1,
+            "category_id": 102,
+            "bbox": [480, 350, 240, 50],
+            "area": 12000.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 3,
+            "image_id": 1,
+            "category_id": 104,
+            "bbox": [0, 0, 1200, 600],
+            "area": 720000.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 4,
+            "image_id": 2,
+            "category_id": 101,
+            "bbox": [600, 450, 184, 44],
+            "area": 8096.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 5,
+            "image_id": 2,
+            "category_id": 105,
+            "bbox": [0, 0, 1387, 624],
+            "area": 865488.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 6,
+            "image_id": 3,
+            "category_id": 110,
+            "bbox": [0, 0, 32, 32],
+            "area": 1024.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 7,
+            "image_id": 4,
+            "category_id": 111,
+            "bbox": [0, 0, 32, 32],
+            "area": 1024.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 8,
+            "image_id": 5,
+            "category_id": 112,
+            "bbox": [0, 0, 1920, 1080],
+            "area": 2073600.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 9,
+            "image_id": 6,
+            "category_id": 113,
+            "bbox": [0, 0, 1920, 1080],
+            "area": 2073600.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 10,
+            "image_id": 7,
+            "category_id": 114,
+            "bbox": [0, 0, 200, 100],
+            "area": 20000.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 11,
+            "image_id": 8,
+            "category_id": 115,
+            "bbox": [0, 0, 300, 50],
+            "area": 15000.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 12,
+            "image_id": 9,
+            "category_id": 116,
+            "bbox": [0, 0, 300, 50],
+            "area": 15000.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 13,
+            "image_id": 10,
+            "category_id": 117,
+            "bbox": [0, 0, 300, 50],
+            "area": 15000.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 14,
+            "image_id": 11,
+            "category_id": 118,
+            "bbox": [0, 0, 100, 50],
+            "area": 5000.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 15,
+            "image_id": 12,
+            "category_id": 119,
+            "bbox": [0, 0, 400, 100],
+            "area": 40000.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 16,
+            "image_id": 13,
+            "category_id": 120,
+            "bbox": [0, 0, 500, 100],
+            "area": 50000.0,
+            "iscrowd": 0
+        }
+    ]
+}

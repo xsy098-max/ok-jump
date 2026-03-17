@@ -1,0 +1,18 @@
+name: "ok-jump"
+uac: true
+profiles:
+  - name: "China"
+    git_url: "https://github.com/your-username/ok-jump.git"
+    admin: true
+    main_script: "main.py"
+    requires_python: "3.12"
+    requirements: "requirements.txt"
+    use_pythonw: true
+    show_add_defender: true
+
+  - name: "Debug"
+    git_url: "https://github.com/your-username/ok-jump.git"
+    main_script: "main_debug.py"
+    admin: true
+    requirements: "requirements.txt"
+    use_pythonw: true
