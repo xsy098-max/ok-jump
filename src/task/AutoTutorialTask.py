@@ -1,153 +1,252 @@
+"""
+自动新手教程任务
+
+使用YOLO模型实现完整的新手引导流程，包含：
+- 状态机管理
+- 多角色选择配置
+- YOLO模型集成
+- 自动战斗触发
+
+流程：
+新手教程开始 → 选角界面检测 → 第一次点击角色 → 确认对话框处理 → 第二次点击角色 
+→ 加载界面 → 自身检测 → 目标检测 → 移动靠近 → 普攻检测 → 向下移动 → 自动战斗触发 
+→ 第一阶段结束检测 → [预留:第二阶段] → [预留:收尾阶段] → 完成
+"""
+
+import time
+
 from ok import og
+
 from src.task.BaseJumpTask import BaseJumpTask
+from src.tutorial.state_machine import TutorialState
+from src.tutorial.character_selector import CharacterSelector, CharacterType
+from src.tutorial.phase1_handler import Phase1Handler
+from src.utils import background_manager
 
 
 class AutoTutorialTask(BaseJumpTask):
+    """
+    自动新手教程任务
+    
+    实现完整的新手引导流程，支持多角色选择
+    """
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.name = "AutoTutorialTask"
-        self.description = "自动新手引导 - 自动完成游戏新手教程"
+        self.description = "自动新手教程 - 自动完成游戏新手教程"
+        
+        # 默认配置
         self.default_config = {
             '启用': True,
-            '自动跳过对话': True,
-            '自动点击引导': True,
-            '自动完成教学战斗': True,
-            '对话等待时间(秒)': 1.0,
-            '点击间隔(秒)': 0.5,
+            '角色选择': '路飞',  # 悟空、路飞、小鸣人、全部
+            '选角界面检测超时(秒)': 10.0,
+            '自身检测超时(秒)': 30.0,
+            '目标检测超时(秒)': 10.0,
+            '普攻检测超时(秒)': 10.0,
+            '第一阶段结束检测超时(秒)': 120.0,
+            '加载后等待时间(秒)': 30.0,
+            '向下移动时间(秒)': 1.5,
+            '移动持续时间(秒)': 0.5,
+            '点击后等待时间(秒)': 1.0,
+            '详细日志': True,
         }
+        
+        # 配置类型定义（下拉框等）
+        self.config_type = {
+            '角色选择': {'type': 'drop_down', 'options': ['悟空', '路飞', '小鸣人', '全部']},
+        }
+        
+        # 配置描述
+        self.config_description = {
+            '角色选择': '选择要执行新手教程的角色，"全部"将依次执行所有角色',
+            '选角界面检测超时(秒)': '检测选角界面的最长等待时间',
+            '自身检测超时(秒)': 'YOLO检测自身的最长等待时间',
+            '目标检测超时(秒)': '检测目标圈/猴子的最长等待时间',
+            '普攻检测超时(秒)': 'OCR检测普攻按钮的最长等待时间',
+            '第一阶段结束检测超时(秒)': '检测第一阶段结束标志的最长等待时间',
+            '加载后等待时间(秒)': '加载完成后等待游戏稳定的缓冲时间',
+            '向下移动时间(秒)': '检测到普攻按钮后向下移动的时间',
+            '移动持续时间(秒)': '每次移动按键的持续时间',
+            '点击后等待时间(秒)': '点击操作后的等待时间',
+            '详细日志': '启用后输出详细的调试日志',
+        }
+        
+        # 处理器
+        self._phase1_handler: Phase1Handler = None
+        
+        # 内部状态
+        self._current_character_index = 0
+        self._completed_characters = []
     
     def run(self):
+        """
+        运行自动新手教程任务
+        """
         self.logger.info("=" * 50)
-        self.logger.info("自动新手引导任务启动")
+        self.logger.info("自动新手教程任务启动")
         self.logger.info("=" * 50)
         
-        if not self.default_config.get('启用', True):
-            self.logger.info("自动新手引导已禁用")
+        if not self.config.get('启用', True):
+            self.logger.info("自动新手教程已禁用")
             return False
         
-        self.logger.info("开始检测新手引导...")
+        # 初始化后台模式
+        background_manager.update_config()
+        self.logger.info(f"后台模式: {'启用' if background_manager.is_background_mode() else '禁用'}")
         
-        steps_completed = 0
-        max_steps = 100
+        # 更新分辨率
+        self.update_resolution()
+        res_info = self.get_resolution_info()
+        self.logger.info(f"当前分辨率: {res_info['current'][0]}x{res_info['current'][1]}")
         
-        for step in range(max_steps):
-            if self._is_tutorial_complete():
-                self.logger.info("新手引导已完成！")
+        # 获取角色选择
+        character = self.config.get('角色选择', '路飞')
+        self.logger.info(f"角色选择: {character}")
+        
+        # 判断是否为"全部"模式
+        selector = CharacterSelector(character)
+        
+        if selector.is_all_mode:
+            # 执行所有角色的新手教程
+            return self._run_all_characters(selector)
+        else:
+            # 执行单个角色的新手教程
+            return self._run_single_character(character)
+    
+    def _run_single_character(self, character: str) -> bool:
+        """
+        执行单个角色的新手教程
+        
+        Args:
+            character: 角色名称
+            
+        Returns:
+            bool: 是否成功完成
+        """
+        self.logger.info(f"开始执行角色 '{character}' 的新手教程")
+        
+        # 创建第一阶段处理器
+        self._phase1_handler = Phase1Handler(self)
+        self._phase1_handler.initialize(character)
+        
+        # 运行第一阶段
+        success = self._phase1_handler.run()
+        
+        if success:
+            self.logger.info(f"角色 '{character}' 新手教程第一阶段完成")
+            
+            # TODO: 第二阶段和收尾阶段（预留）
+            # self._run_phase2()
+            # self._run_phase3()
+            
+            self.logger.info(f"角色 '{character}' 新手教程完成")
+        else:
+            reason = self._phase1_handler.state_machine.failure_reason
+            self.logger.error(f"角色 '{character}' 新手教程失败: {reason}")
+            self._save_error_screenshot(f"{character}_tutorial_failed")
+        
+        # 清理资源
+        self._phase1_handler.cleanup()
+        
+        return success
+    
+    def _run_all_characters(self, selector: CharacterSelector) -> bool:
+        """
+        执行所有角色的新手教程（依次执行）
+        
+        执行顺序：悟空 → 小鸣人 → 路飞
+        
+        Args:
+            selector: 角色选择器
+            
+        Returns:
+            bool: 是否全部成功完成
+        """
+        self.logger.info("开始执行所有角色的新手教程")
+        self.logger.info(f"执行顺序: 悟空 → 小鸣人 → 路飞")
+        
+        all_success = True
+        self._completed_characters = []
+        
+        while selector.has_more_characters():
+            config = selector.get_current_config()
+            if not config:
                 break
             
-            if self.default_config.get('自动跳过对话', True):
-                if self._skip_dialog():
-                    steps_completed += 1
-                    continue
+            character_name = config.name
+            self.logger.info(f"\n{'='*50}")
+            self.logger.info(f"开始角色: {character_name}")
+            self.logger.info(f"{'='*50}")
             
-            if self.default_config.get('自动点击引导', True):
-                if self._click_tutorial_guide():
-                    steps_completed += 1
-                    continue
+            # 执行单个角色
+            success = self._run_single_character(character_name)
             
-            if self.default_config.get('自动完成教学战斗', True):
-                if self._handle_tutorial_combat():
-                    steps_completed += 1
-                    continue
+            if success:
+                self._completed_characters.append(character_name)
+                self.logger.info(f"角色 '{character_name}' 完成")
+            else:
+                all_success = False
+                self.logger.error(f"角色 '{character_name}' 失败")
+                # 继续执行下一个角色
             
-            import time
-            time.sleep(0.5)
+            # 移动到下一个角色
+            selector.move_to_next_character()
+            
+            # 角色之间等待一段时间
+            if selector.has_more_characters():
+                wait_time = 5
+                self.logger.info(f"等待 {wait_time} 秒后继续下一个角色...")
+                time.sleep(wait_time)
         
-        self.logger.info(f"新手引导完成，共完成 {steps_completed} 个步骤")
-        return True
+        # 汇总结果
+        self.logger.info("\n" + "=" * 50)
+        self.logger.info("新手教程执行完成")
+        self.logger.info(f"完成角色: {', '.join(self._completed_characters)}")
+        self.logger.info(f"总体结果: {'成功' if all_success else '部分失败'}")
+        self.logger.info("=" * 50)
+        
+        return all_success
     
-    def _is_tutorial_complete(self):
-        complete_indicator = self.find_feature('tutorial_complete')
-        if complete_indicator:
-            self.logger.info("检测到新手引导完成标志")
-            return True
+    def _save_error_screenshot(self, error_name: str):
+        """
+        保存错误截图
         
-        if self.in_lobby():
-            no_tutorial = self.find_feature('no_tutorial_indicator')
-            if no_tutorial:
-                return True
+        Args:
+            error_name: 错误名称
+        """
+        import os
+        import re
+        import cv2
         
-        return False
+        screenshots_dir = "screenshots"
+        if not os.path.exists(screenshots_dir):
+            os.makedirs(screenshots_dir)
+        
+        safe_name = re.sub(r'[\\/:*?"<>|]', '_', error_name)
+        filename = f"{safe_name}_{time.strftime('%H-%M-%S')}.png"
+        filepath = os.path.join(screenshots_dir, filename)
+        
+        if self.frame is not None:
+            cv2.imwrite(filepath, self.frame)
+            self.logger.error(f"错误截图已保存: {filepath}")
     
-    def _skip_dialog(self):
-        dialog_skip = self.find_feature('dialog_skip')
-        if dialog_skip:
-            self.click(dialog_skip[0], dialog_skip[1])
-            self.logger.info("跳过对话")
-            
-            import time
-            wait_time = self.default_config.get('对话等待时间(秒)', 1.0)
-            time.sleep(wait_time)
-            return True
+    def get_current_state(self) -> str:
+        """
+        获取当前状态名称
         
-        dialog_next = self.find_feature('dialog_next')
-        if dialog_next:
-            self.click(dialog_next[0], dialog_next[1])
-            self.logger.info("点击下一步对话")
-            
-            import time
-            wait_time = self.default_config.get('对话等待时间(秒)', 1.0)
-            time.sleep(wait_time)
-            return True
-        
-        return False
+        Returns:
+            str: 状态名称
+        """
+        if self._phase1_handler:
+            return self._phase1_handler.state_machine.get_state_name()
+        return "未开始"
     
-    def _click_tutorial_guide(self):
-        guide_arrow = self.find_feature('tutorial_arrow')
-        if guide_arrow:
-            self.click(guide_arrow[0], guide_arrow[1])
-            self.logger.info("点击引导箭头")
-            
-            import time
-            interval = self.default_config.get('点击间隔(秒)', 0.5)
-            time.sleep(interval)
-            return True
+    def get_completed_characters(self) -> list:
+        """
+        获取已完成的角色列表
         
-        guide_highlight = self.find_feature('tutorial_highlight')
-        if guide_highlight:
-            self.click(guide_highlight[0], guide_highlight[1])
-            self.logger.info("点击高亮引导区域")
-            
-            import time
-            interval = self.default_config.get('点击间隔(秒)', 0.5)
-            time.sleep(interval)
-            return True
-        
-        guide_button = self.find_feature('tutorial_button')
-        if guide_button:
-            self.click(guide_button[0], guide_button[1])
-            self.logger.info("点击引导按钮")
-            
-            import time
-            interval = self.default_config.get('点击间隔(秒)', 0.5)
-            time.sleep(interval)
-            return True
-        
-        return False
-    
-    def _handle_tutorial_combat(self):
-        tutorial_combat = self.find_feature('tutorial_combat_indicator')
-        if tutorial_combat:
-            self.logger.info("检测到教学战斗")
-            
-            attack_key = og.config.get('游戏热键配置', {}).get('普通攻击', 'J')
-            skill1_key = og.config.get('游戏热键配置', {}).get('技能1', 'U')
-            skill2_key = og.config.get('游戏热键配置', {}).get('技能2', 'I')
-            ultimate_key = og.config.get('游戏热键配置', {}).get('大招', 'O')
-            
-            import time
-            for _ in range(5):
-                self.send_key(attack_key)
-                time.sleep(0.3)
-                self.send_key(skill1_key)
-                time.sleep(0.3)
-                self.send_key(skill2_key)
-                time.sleep(0.3)
-                self.send_key(ultimate_key)
-                time.sleep(0.5)
-            
-            self.logger.info("教学战斗攻击完成")
-            return True
-        
-        return False
+        Returns:
+            list: 已完成的角色名称列表
+        """
+        return self._completed_characters.copy()

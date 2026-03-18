@@ -83,6 +83,30 @@
             "file_name": "images/login/xuanren.png",
             "height": 100,
             "width": 500
+        },
+        {
+            "id": 14,
+            "file_name": "images/new/back.png",
+            "height": 38,
+            "width": 177
+        },
+        {
+            "id": 15,
+            "file_name": "images/new/comfirm.png",
+            "height": 44,
+            "width": 166
+        },
+        {
+            "id": 16,
+            "file_name": "images/new/end01.png",
+            "height": 32,
+            "width": 354
+        },
+        {
+            "id": 17,
+            "file_name": "images/new/end02.png",
+            "height": 40,
+            "width": 147
         }
     ],
     "categories": [
@@ -240,6 +264,26 @@
             "id": 207,
             "name": "result_defeat",
             "supercategory": "ui"
+        },
+        {
+            "id": 300,
+            "name": "tutorial_back_button",
+            "supercategory": "tutorial_ui"
+        },
+        {
+            "id": 301,
+            "name": "tutorial_confirm_button",
+            "supercategory": "tutorial_ui"
+        },
+        {
+            "id": 302,
+            "name": "tutorial_end01",
+            "supercategory": "tutorial_ui"
+        },
+        {
+            "id": 303,
+            "name": "tutorial_end02",
+            "supercategory": "tutorial_ui"
         }
     ],
     "annotations": [
@@ -377,6 +421,38 @@
             "category_id": 120,
             "bbox": [0, 0, 500, 100],
             "area": 50000.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 17,
+            "image_id": 14,
+            "category_id": 300,
+            "bbox": [0, 0, 177, 38],
+            "area": 6726.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 18,
+            "image_id": 15,
+            "category_id": 301,
+            "bbox": [0, 0, 166, 44],
+            "area": 7304.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 19,
+            "image_id": 16,
+            "category_id": 302,
+            "bbox": [0, 0, 354, 32],
+            "area": 11328.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 20,
+            "image_id": 17,
+            "category_id": 303,
+            "bbox": [0, 0, 147, 40],
+            "area": 5880.0,
             "iscrowd": 0
         }
     ]
