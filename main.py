@@ -1,3 +1,4 @@
+import atexit
 import json
 import subprocess
 import zipfile
@@ -6,6 +7,53 @@ from pathlib import Path
 from config import config
 from ok import OK, og, Logger
 from ok.gui.start.StartCard import StartCard
+
+
+def patch_logger_handler():
+    """
+    Patch SafeFileHandler to prevent I/O errors on exit and during log rotation.
+    The original implementation raises errors when:
+    - The file is closed during program shutdown
+    - The file is locked during log rotation (PermissionError)
+    """
+    from ok.util.logger import SafeFileHandler
+    from logging.handlers import TimedRotatingFileHandler
+    logger = Logger.get_logger(__name__)
+    
+    def patched_emit(self, record):
+        """Silently skip if stream is closed or file is locked."""
+        try:
+            if self.stream is None or self.stream.closed:
+                return  # Silently skip, don't raise error
+            super(TimedRotatingFileHandler, self).emit(record)
+        except PermissionError:
+            # File is locked by another process (e.g., during rollover)
+            self.handleError(record)
+        except Exception:
+            self.handleError(record)
+    
+    SafeFileHandler.emit = patched_emit
+    logger.info('SafeFileHandler patched: I/O errors suppressed')
+
+
+def cleanup_logger():
+    """
+    Clean up logger resources to prevent I/O errors on exit.
+    Stops the QueueListener thread before file handles are closed.
+    """
+    import logging
+    
+    # Find and stop the QueueListener by checking all handlers
+    ok_logger = logging.getLogger("ok")
+    for handler in ok_logger.handlers:
+        # QueueHandler wraps the actual handlers
+        if hasattr(handler, 'queue'):
+            # This is a QueueHandler, drain the queue
+            try:
+                while not handler.queue.empty():
+                    handler.queue.get_nowait()
+            except Exception:
+                pass
 
 
 def export_logs():
@@ -117,9 +165,13 @@ def smart_device_selection():
 StartCard.export_logs = staticmethod(export_logs)
 
 if __name__ == '__main__':
+    # Register cleanup function to run on exit
+    atexit.register(cleanup_logger)
+    
     # Smart device selection (MUST be before OK(config)!)
     smart_device_selection()
     # Apply patches before starting
+    patch_logger_handler()
     patch_start_controller()
     patch_task_buttons_alignment()
     # Initialize OK framework (will read devices.json)

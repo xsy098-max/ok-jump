@@ -47,9 +47,16 @@ class TutorialDetector:
         self._verbose = verbose
     
     def _log(self, message: str):
-        """输出日志"""
-        if self._verbose and hasattr(self.task, 'logger'):
-            self.task.logger.info(f"[检测器] {message}")
+        """输出日志
+        
+        注意：后台线程中使用 print 而非 logger，避免 I/O closed 错误
+        """
+        if self._verbose:
+            # 检查是否在后台线程中
+            if threading.current_thread() is not threading.main_thread():
+                print(f"[检测器] {message}")
+            elif hasattr(self.task, 'logger'):
+                self.task.logger.info(f"[检测器] {message}")
     
     # ==================== 选角界面检测 ====================
     
@@ -163,19 +170,7 @@ class TutorialDetector:
                 try:
                     texts = self.task.ocr()
                     if texts:
-                        # 查找包含"返"和"回"的文本框
-                        for i, t in enumerate(texts):
-                            if t.name == '返' and i + 1 < len(texts):
-                                # 检查下一个是否是"回"
-                                next_t = texts[i + 1]
-                                if next_t.name == '回':
-                                    # 合并两个框的位置，取中间点
-                                    center_x = (t.x + t.width // 2 + next_t.x + next_t.width // 2) // 2
-                                    center_y = (t.y + t.height // 2 + next_t.y + next_t.height // 2) // 2
-                                    self._log(f"[OCR] 检测到返回文字: 合并位置 ({center_x}, {center_y})")
-                                    return (center_x, center_y)
-                        
-                        # 也尝试匹配"返回"作为一个整体
+                        # 使用 find_boxes 匹配"返回"（支持简繁转换）
                         back_texts = self.task.find_boxes(texts, match=re.compile(r"返回"))
                         if back_texts:
                             t = back_texts[0]
@@ -183,6 +178,17 @@ class TutorialDetector:
                             center_y = t.y + t.height // 2
                             self._log(f"[OCR] 检测到返回文字: ({center_x}, {center_y})")
                             return (center_x, center_y)
+                        
+                        # 备选：检测分开的"返"和"回"（某些OCR可能分开识别）
+                        for i, t in enumerate(texts):
+                            if t.name in ('返', '返回') and i + 1 < len(texts):
+                                next_t = texts[i + 1]
+                                if next_t.name in ('回', '返回'):
+                                    # 合并两个框的位置，取中间点
+                                    center_x = (t.x + t.width // 2 + next_t.x + next_t.width // 2) // 2
+                                    center_y = (t.y + t.height // 2 + next_t.y + next_t.height // 2) // 2
+                                    self._log(f"[OCR] 检测到返回文字: 合并位置 ({center_x}, {center_y})")
+                                    return (center_x, center_y)
                 except Exception as e:
                     self._log(f"[{check_count}] OCR检测异常: {e}")
                 
@@ -260,79 +266,130 @@ class TutorialDetector:
         return None
     
     # ==================== 加载界面检测 ====================
+        
+    def _detect_loading_percentage(self):
+        """
+        检测右下角的加载百分比（与AutoLoginTask保持一致）
+    
+        Returns:
+            int | None: 检测到的百分比数值（0-100），未检测到返回 None
+        """
+        if self.task.frame is None:
+            return None
+    
+        try:
+            import re
+            frame_h, frame_w = self.task.frame.shape[:2]
+    
+            # 定义右下角区域（右下角 1/4 区域）
+            roi_x = int(frame_w * 0.75)
+            roi_y = int(frame_h * 0.75)
+    
+            # 方法1：使用OCR检测
+            texts = self._get_ocr_texts()
+            if texts:
+                percentage_pattern = re.compile(r'(\d{1,3})\s*%')
+                    
+                for result in texts:
+                    try:
+                        text = getattr(result, 'name', str(result))
+                        # 检查是否在右下角区域
+                        if hasattr(result, 'x') and hasattr(result, 'y'):
+                            if result.x >= roi_x and result.y >= roi_y:
+                                self._log(f"右下角OCR文本: '{text}' at ({result.x}, {result.y})")
+                                match = percentage_pattern.search(text)
+                                if match:
+                                    percentage = int(match.group(1))
+                                    if 0 <= percentage <= 100:
+                                        self._log(f"检测到加载百分比: {percentage}%")
+                                        return percentage
+                    except (ValueError, AttributeError) as e:
+                        self._log(f"解析失败: {e}")
+                        continue
+    
+            return None
+    
+        except Exception as e:
+            self._log(f"加载百分比检测失败: {e}")
+            return None
     
     def detect_loading_start(self, timeout: float = 10.0) -> bool:
         """
         检测加载界面开始
-        
-        通过检测画面变化判断
-        
+            
+        通过检测右下角百分比判断（与AutoLoginTask保持一致）
+            
         Args:
             timeout: 超时时间（秒）
-            
+                
         Returns:
             bool: 是否检测到加载开始
         """
         start_time = time.time()
-        prev_frame = None
-        
+            
         while time.time() - start_time < timeout:
             self.task.next_frame()
-            frame = self.task.frame
-            
-            if frame is None:
-                time.sleep(0.1)
-                continue
-            
-            # 简单判断：如果画面很暗（黑屏），认为进入加载
-            import cv2
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            avg_brightness = gray.mean()
-            
-            if avg_brightness < 30:  # 亮度阈值
-                self._log(f"检测到加载界面开始，亮度: {avg_brightness:.1f}")
+                
+            percentage = self._detect_loading_percentage()
+            if percentage is not None:
+                self._log(f"检测到加载界面开始: {percentage}%")
                 return True
-            
+                
             time.sleep(0.1)
-        
+            
         return False
     
     def detect_loading_end(self, timeout: float = 60.0) -> bool:
         """
         检测加载界面结束
-        
-        通过检测画面变化或YOLO可检测判断
-        
+            
+        通过检测百分比消失或达到100%判断（与AutoLoginTask保持一致）
+            
         Args:
             timeout: 超时时间（秒）
-            
+                
         Returns:
             bool: 是否检测到加载结束
         """
         start_time = time.time()
-        
+        last_percentage = None
+        stuck_time = None
+        STUCK_TIMEOUT = 60.0  # 加载停滞超时
+            
         while time.time() - start_time < timeout:
             if hasattr(self.task, '_should_exit') and self.task._should_exit():
                 return False
-            
+                
             self.task.next_frame()
-            frame = self.task.frame
-            
-            if frame is None:
-                time.sleep(0.1)
-                continue
-            
-            # 检测画面亮度恢复
-            import cv2
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            avg_brightness = gray.mean()
-            
-            if avg_brightness > 50:  # 亮度恢复
-                self._log(f"检测到加载界面结束，亮度: {avg_brightness:.1f}")
-                return True
-            
+            self._clear_ocr_cache()  # 清空缓存以获取最新OCR结果
+                
+            percentage = self._detect_loading_percentage()
+                
+            if percentage is not None:
+                # 检测到百分比
+                if percentage >= 100:
+                    self._log(f"加载完成: {percentage}%")
+                    return True
+                    
+                # 检查是否停滞
+                if last_percentage == percentage:
+                    if stuck_time is None:
+                        stuck_time = time.time()
+                    elif time.time() - stuck_time > STUCK_TIMEOUT:
+                        self._log(f"加载停滞超时：卡在 {percentage}% 超过 {STUCK_TIMEOUT} 秒")
+                        return False
+                else:
+                    stuck_time = None
+                    last_percentage = percentage
+                    self._log(f"加载进度: {percentage}%")
+            else:
+                # 未检测到百分比，可能加载已完成
+                if last_percentage is not None:
+                    self._log("加载界面结束（百分比消失）")
+                    return True
+                
             time.sleep(0.2)
-        
+            
         self._log("加载界面结束检测超时")
         return False
     
@@ -446,9 +503,8 @@ class TutorialDetector:
                 continue
             
             # 使用 fight2.onnx 检测猴子（标签0）
-            # 注意：需要切换模型
             try:
-                results = og.my_app.yolo_detect(
+                results = og.my_app.yolo_detect_2(
                     frame,
                     threshold=0.5,
                     label=0  # 猴子标签

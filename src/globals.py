@@ -59,6 +59,9 @@ class Globals(QObject):
         # 登录任务完成状态（用于单独运行自动登录任务时的状态管理）
         self._login_task_completed = False
 
+        # 新手教程完成状态（用于通知自动战斗触发器）
+        self._tutorial_completed = False
+
     # ==================== 登录状态管理 ====================
 
     @property
@@ -110,6 +113,32 @@ class Globals(QObject):
     def reset_login_task_state(self):
         """重置登录任务状态"""
         self._login_task_completed = False
+
+    # ==================== 新手教程完成状态管理 ====================
+
+    def set_tutorial_completed(self, completed: bool):
+        """
+        设置新手教程完成状态
+
+        当新手教程完成时设置此状态，通知 AutoCombatTask 可以开始战斗
+
+        Args:
+            completed: 是否完成
+        """
+        self._tutorial_completed = completed
+
+    def is_tutorial_completed(self) -> bool:
+        """
+        检查新手教程是否已完成
+
+        Returns:
+            bool: True 如果新手教程已完成
+        """
+        return self._tutorial_completed
+
+    def reset_tutorial_state(self):
+        """重置新手教程状态"""
+        self._tutorial_completed = False
 
     # ==================== 游戏语言管理 ====================
 
@@ -207,7 +236,7 @@ class Globals(QObject):
         获取 YOLO 模型（延迟加载）
         
         Returns:
-            OnnxYoloDetect: YOLO 检测器实例
+            OnnxYoloDetect: YOLO 检测器实例（fight.onnx）
         """
         if self._yolo_model is None:
             from src.OnnxYoloDetect import OnnxYoloDetect
@@ -227,9 +256,38 @@ class Globals(QObject):
         
         return self._yolo_model
 
+    # 第二个YOLO模型（fight2.onnx - 悟空专用）
+    _yolo_model_2 = None
+
+    @property
+    def yolo_model_2(self):
+        """
+        获取第二个 YOLO 模型（fight2.onnx - 悟空专用）
+        
+        Returns:
+            OnnxYoloDetect: YOLO 检测器实例（fight2.onnx）
+        """
+        if self._yolo_model_2 is None:
+            from src.OnnxYoloDetect import OnnxYoloDetect
+            
+            # 获取项目根目录
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            weights_path = os.path.join(project_root, "assets", "Fight", "fight2.onnx")
+            
+            if os.path.exists(weights_path):
+                self._yolo_model_2 = OnnxYoloDetect(
+                    weights=weights_path,
+                    conf_threshold=0.25,
+                    iou_threshold=0.45
+                )
+            else:
+                raise FileNotFoundError(f"YOLO 模型文件不存在: {weights_path}")
+        
+        return self._yolo_model_2
+
     def yolo_detect(self, image, threshold=0.5, label=-1):
         """
-        使用 YOLO 进行检测
+        使用 YOLO 进行检测（默认使用 fight.onnx）
         
         Args:
             image: BGR 图像 (numpy array)
@@ -251,6 +309,27 @@ class Globals(QObject):
             print(f"YOLO 检测失败: {e}")
             return []
 
+    def yolo_detect_2(self, image, threshold=0.5, label=-1):
+        """
+        使用第二个 YOLO 模型进行检测（fight2.onnx - 悟空专用）
+        
+        Args:
+            image: BGR 图像 (numpy array)
+            threshold: 置信度阈值
+            label: 过滤特定标签 (-1 表示不过滤)
+                   0: 猴子
+        
+        Returns:
+            list: 检测结果列表 [DetectionResult, ...]
+        """
+        try:
+            return self.yolo_model_2.detect(image, threshold=threshold, label=label)
+        except Exception as e:
+            # 模型加载失败时返回空列表
+            print(f"YOLO 检测失败(fight2): {e}")
+            return []
+
     def reset_yolo_model(self):
         """重置 YOLO 模型（释放内存）"""
         self._yolo_model = None
+        self._yolo_model_2 = None

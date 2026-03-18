@@ -80,6 +80,13 @@ class Features:
     RESULT_VICTORY = 'result_victory'  # 胜利结算
     RESULT_DEFEAT = 'result_defeat'    # 失败结算
 
+    # ==================== 新手教程相关 ====================
+
+    TUTORIAL_BACK_BUTTON = 'tutorial_back_button'       # 返回按钮
+    TUTORIAL_CONFIRM_BUTTON = 'tutorial_confirm_button' # 确定按钮
+    TUTORIAL_END01 = 'tutorial_end01'                   # 第一阶段结束标志
+    TUTORIAL_END02 = 'tutorial_end02'                   # 开始对战按钮
+
 
 # 便于导入的别名
 F = Features

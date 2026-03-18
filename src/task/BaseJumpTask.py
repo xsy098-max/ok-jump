@@ -277,6 +277,145 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
 
         return matched
 
+    def find_text_fuzzy(self, ocr_results, target_text, return_center=True):
+        """
+        模糊查找OCR文本（支持分开识别的容错机制）
+
+        OCR有时会将多字词语分开识别，例如：
+        - "返回" 可能被识别为 ['返', '回']
+        - "确定" 可能被识别为 ['确', '定']
+
+        此方法会依次尝试：
+        1. 完整匹配：查找包含完整目标文字的文本框
+        2. 分字匹配：查找所有单字，如果全部找到则合并位置
+        3. 部分匹配：查找第一个找到的单字
+
+        Args:
+            ocr_results: OCR 识别结果列表
+            target_text: 目标文字（如 "返回"、"确定"）
+            return_center: 是否返回中心位置（True）或返回文本框对象（False）
+
+        Returns:
+            如果 return_center=True: 返回 (x, y) 元组，未找到返回 None
+            如果 return_center=False: 返回 Box 对象或合并后的虚拟 Box 对象
+        """
+        if not ocr_results or not target_text:
+            return None
+
+        # 获取简体和繁体两种形式的目标文字
+        simplified_text = target_text
+        traditional_text = LangConverter.simplify_to_traditional(target_text)
+        
+        # 根据游戏语言设置决定优先顺序
+        is_traditional = self._is_traditional_chinese()
+        if is_traditional:
+            # 繁体环境：优先繁体，其次简体
+            search_order = [traditional_text, simplified_text]
+            self.log_info(f"[OCR模糊匹配] 繁体环境，目标: '{target_text}', 繁体: '{traditional_text}', 简体: '{simplified_text}'")
+        else:
+            # 简体环境：优先简体，其次繁体
+            search_order = [simplified_text, traditional_text]
+            self.log_info(f"[OCR模糊匹配] 简体环境，目标: '{target_text}', 简体: '{simplified_text}', 繁体: '{traditional_text}'")
+
+        # 方法1: 完整匹配 - 查找包含完整目标文字的文本框（支持简繁双语）
+        matched_boxes = self.find_boxes(ocr_results, match=target_text)
+        if matched_boxes:
+            box = matched_boxes[0]
+            self.log_info(f"[OCR模糊匹配] 完整匹配成功: '{box.name}'")
+            if return_center:
+                return (box.x + box.width // 2, box.y + box.height // 2)
+            return box
+
+        # 方法2: 分字匹配 - 按优先顺序尝试
+        for search_text in search_order:
+            chars = list(search_text)
+            char_boxes = {}
+
+            self.log_info(f"[OCR模糊匹配] 分字匹配: 尝试 '{search_text}' -> {chars}")
+
+            for t in ocr_results:
+                for char in chars:
+                    if char in t.name and char not in char_boxes:
+                        char_boxes[char] = t
+                        self.log_info(f"[OCR模糊匹配] 找到字符 '{char}' 在 '{t.name}' 中")
+
+            # 检查是否找到了所有单字
+            if len(char_boxes) == len(chars):
+                # 合并所有单字的位置
+                total_x = sum(t.x + t.width // 2 for t in char_boxes.values())
+                total_y = sum(t.y + t.height // 2 for t in char_boxes.values())
+                center_x = total_x // len(char_boxes)
+                center_y = total_y // len(char_boxes)
+
+                self.log_info(f"[OCR模糊匹配] '{target_text}' 被分开识别为 {list(char_boxes.keys())}，合并位置: ({center_x}, {center_y})")
+
+                if return_center:
+                    return (center_x, center_y)
+
+                # 创建虚拟 Box 对象
+                class VirtualBox:
+                    def __init__(self, x, y, w, h, name):
+                        self.x = x
+                        self.y = y
+                        self.width = w
+                        self.height = h
+                        self.name = name
+                        self.center_x = x + w // 2
+                        self.center_y = y + h // 2
+
+                # 使用第一个字符的尺寸作为虚拟Box的尺寸
+                first_box = list(char_boxes.values())[0]
+                return VirtualBox(center_x - first_box.width // 2,
+                                center_y - first_box.height // 2,
+                                first_box.width, first_box.height, target_text)
+
+        # 方法3: 部分匹配 - 按优先顺序返回找到的第一个单字（最后尝试）
+        for search_text in search_order:
+            chars = list(search_text)
+            char_boxes = {}
+
+            for t in ocr_results:
+                for char in chars:
+                    if char in t.name and char not in char_boxes:
+                        char_boxes[char] = t
+
+            for char in chars:
+                if char in char_boxes:
+                    box = char_boxes[char]
+                    self.log_info(f"[OCR模糊匹配] 仅找到 '{char}' 字，位置: ({box.x + box.width // 2}, {box.y + box.height // 2})")
+                    if return_center:
+                        return (box.x + box.width // 2, box.y + box.height // 2)
+                    return box
+
+        self.log_info(f"[OCR模糊匹配] 未找到 '{target_text}'")
+        return None
+
+    def find_text_fuzzy_with_retry(self, target_text, timeout=5.0, ocr_interval=0.1):
+        """
+        带重试的模糊文字查找（自动获取OCR结果）
+
+        Args:
+            target_text: 目标文字
+            timeout: 超时时间（秒）
+            ocr_interval: OCR检测间隔（秒）
+
+        Returns:
+            tuple: (x, y) 位置，未找到返回 None
+        """
+        import time
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            self.next_frame()
+            texts = self.ocr()
+            if texts:
+                result = self.find_text_fuzzy(texts, target_text)
+                if result:
+                    return result
+            time.sleep(ocr_interval)
+
+        return None
+
     def _convert_match_for_lang(self, match):
         """
         根据游戏文本语言转换匹配模式

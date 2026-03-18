@@ -631,6 +631,13 @@ class AutoLoginTask(BaseJumpTask):
             if current_screen == self.LOADING_SCREEN:
                 # 加载界面 - 特殊处理，不增加尝试次数
                 action = self._handle_loading_screen
+            elif current_screen == self.CHARACTER_SELECTION_SCREEN:
+                # 角色选择界面 - 登录成功
+                self.log_info("检测到角色选择界面，登录成功")
+                self._logged_in = True
+                self._clear_failure()
+                self.info_set('登录状态', '已登录')
+                return True
             elif current_screen == self.LOGIN_SCREEN_0:
                 action = self._handle_login_screen_0
             elif current_screen == self.LOGIN_SCREEN_1:
@@ -772,10 +779,11 @@ class AutoLoginTask(BaseJumpTask):
         
         检测优先级（从高到低）：
         1. 加载界面 - 最高优先级，避免其他检测干扰
-        2. 登录界面0（适龄提示）
-        3. 登录界面1（账户登录）
-        4. 登录界面2（开始游戏）
-        5. 未知界面
+        2. 角色选择界面 - 登录成功后的界面
+        3. 登录界面0（适龄提示）
+        4. 登录界面1（账户登录）
+        5. 登录界面2（开始游戏）
+        6. 未知界面
         
         Returns:
             str | None: 界面类型标识
@@ -785,6 +793,10 @@ class AutoLoginTask(BaseJumpTask):
             return self.LOADING_SCREEN
         
         texts = self._get_ocr_texts()
+
+        # 检测角色选择界面（登录成功）
+        if self._check_character_selection_screen(texts):
+            return self.CHARACTER_SELECTION_SCREEN
 
         if self._check_login_screen_0(texts):
             return self.LOGIN_SCREEN_0
@@ -811,6 +823,38 @@ class AutoLoginTask(BaseJumpTask):
         if percentage is not None:
             self.log_debug(f"检测到加载界面: {percentage}%")
             return True
+        return False
+
+    def _check_character_selection_screen(self, texts=None):
+        """
+        检测是否为角色选择界面
+        
+        角色选择界面特征：
+        - OCR识别到"请选择一位你心仪的角色"或类似文本
+        
+        Returns:
+            bool: True 如果检测到角色选择界面
+        """
+        if texts is None:
+            texts = self._get_ocr_texts()
+        
+        if not texts:
+            return False
+        
+        # 只需写简体中文，find_boxes会自动调用LangConverter转换为双语模式
+        patterns = [
+            re.compile(r"请选择一位你心仪的角色"),
+            re.compile(r"请选择.*心仪的角色"),
+            re.compile(r"选择.*角色"),
+            re.compile(r"心仪的角色"),
+        ]
+        
+        for pattern in patterns:
+            select_char = self.find_boxes(texts, match=pattern)
+            if select_char and len(select_char) > 0:
+                self.log_debug(f"OCR检测到角色选择界面")
+                return True
+        
         return False
 
     def _check_login_screen_0(self, texts=None):
@@ -1899,13 +1943,15 @@ class AutoLoginTask(BaseJumpTask):
                     pass
 
                 texts = self._get_ocr_texts()
-                for box in texts:
-                    if box.name == "提交":
-                        click_x = (box.x + box.width / 2) / self.width
-                        click_y = (box.y + box.height / 2) / self.height
-                        self.log_info(f"OCR精确匹配找到{step_name}: '{box.name}' at ({box.x}, {box.y})，点击...")
-                        self.click_relative(click_x, click_y, after_sleep=0.5)
-                        return True
+                # 使用 find_boxes 进行简繁双语匹配
+                submit_boxes = self.find_boxes(texts, match=re.compile(r"提交|送出|确认"))
+                if submit_boxes:
+                    box = submit_boxes[0]
+                    click_x = (box.x + box.width / 2) / self.width
+                    click_y = (box.y + box.height / 2) / self.height
+                    self.log_info(f"OCR匹配找到{step_name}: '{box.name}' at ({box.x}, {box.y})，点击...")
+                    self.click_relative(click_x, click_y, after_sleep=0.5)
+                    return True
 
             time.sleep(0.0)
 
