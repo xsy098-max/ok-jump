@@ -101,8 +101,17 @@ class TestAllInOneTask(BaseJumpTask):
             try:
                 self.logger.info(f"\n▶ 开始执行: {task_name}")
                 
-                # 使用框架提供的 run_task_by_class 方法运行子任务
-                result = self.run_task_by_class(task_class)
+                # 获取任务实例
+                task_instance = self.get_task_by_class(task_class)
+                if task_instance is None:
+                    self.logger.error(f"❌ 无法获取任务实例: {task_name}")
+                    break
+                
+                # 标记为非单独运行模式（重要：让子任务知道它被其他任务调用）
+                task_instance.set_caller(self)
+                
+                # 直接调用 run() 方法获取返回值
+                result = task_instance.run()
                 
                 if result:
                     self.logger.info(f"✅ {task_name} 执行成功")
