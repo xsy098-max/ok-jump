@@ -80,7 +80,6 @@ class AutoLoginTask(BaseJumpTask):
         self._final_status = None  # 最终状态
 
         self.default_config = {
-            '启用': True,
             '自动启动游戏': False,
             '等待游戏启动(秒)': 120,
             '最大登录尝试次数': 5,

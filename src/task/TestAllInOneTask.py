@@ -29,7 +29,6 @@ class TestAllInOneTask(BaseJumpTask):
         
         # 默认配置 - 必须在 __init__ 中定义为实例属性
         self.default_config = {
-            '启用': True,
             '执行自动登录': True,
             '执行自动新手教程': True,
             '执行自动匹配': False,

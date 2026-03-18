@@ -9,7 +9,6 @@ class DailyTask(BaseJumpTask):
         self.name = "DailyTask"
         self.description = "日常任务 - 自动完成每日任务"
         self.default_config = {
-            '启用': True,
             '完成日常任务': True,
             '收集奖励': True,
             '使用体力': True,
@@ -20,10 +19,6 @@ class DailyTask(BaseJumpTask):
         self.logger.info("=" * 50)
         self.logger.info("日常任务启动")
         self.logger.info("=" * 50)
-        
-        if not self.default_config.get('启用', True):
-            self.logger.info("日常任务已禁用")
-            return False
         
         results = {
             'daily_quests': False,

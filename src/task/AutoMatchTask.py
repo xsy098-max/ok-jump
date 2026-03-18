@@ -12,7 +12,6 @@ class AutoMatchTask(BaseJumpTask):
         self.name = "AutoMatchTask"
         self.description = "自动匹配 - 自动开始游戏匹配"
         self.default_config = {
-            '启用': True,
             '游戏模式': '排位赛',
             '自动接受匹配': True,
             '最大等待时间(秒)': 300,
@@ -22,10 +21,6 @@ class AutoMatchTask(BaseJumpTask):
         self.logger.info("=" * 50)
         self.logger.info("自动匹配任务启动")
         self.logger.info("=" * 50)
-        
-        if not self.default_config.get('启用', True):
-            self.logger.info("自动匹配已禁用")
-            return False
         
         self.update_resolution()
         res_info = self.get_resolution_info()
