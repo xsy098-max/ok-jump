@@ -6,6 +6,7 @@ from src.task.AutoMatchTask import AutoMatchTask
 from src.task.AutoCombatTask import AutoCombatTask
 from src.task.DailyTask import DailyTask
 from src.task.AutoTutorialTask import AutoTutorialTask
+from src.task.TestAllInOneTask import TestAllInOneTask
 
 __all__ = [
     'BaseJumpTask', 
@@ -15,5 +16,6 @@ __all__ = [
     'AutoMatchTask',
     'AutoCombatTask',
     'DailyTask',
-    'AutoTutorialTask'
+    'AutoTutorialTask',
+    'TestAllInOneTask'
 ]
