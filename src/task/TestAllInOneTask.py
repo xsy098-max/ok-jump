@@ -47,9 +47,10 @@ class TestAllInOneTask(BaseJumpTask):
         try:
             from src.task.AutoLoginTask import AutoLoginTask
             
-            # 创建并执行自动登录任务实例
+            # 创建并执行自动登录任务实例，传递相同的上下文
             login_task = AutoLoginTask(self.context)
             login_task.logger = self.logger  # 共享日志器
+            login_task.set_caller(self)  # 标记调用关系
             
             return login_task.run()
         except Exception as e:
@@ -61,9 +62,10 @@ class TestAllInOneTask(BaseJumpTask):
         try:
             from src.task.AutoTutorialTask import AutoTutorialTask
             
-            # 创建并执行自动新手教程任务实例
+            # 创建并执行自动新手教程任务实例，传递相同的上下文
             tutorial_task = AutoTutorialTask(self.context)
             tutorial_task.logger = self.logger  # 共享日志器
+            tutorial_task.set_caller(self)  # 标记调用关系
             
             return tutorial_task.run()
         except Exception as e:
