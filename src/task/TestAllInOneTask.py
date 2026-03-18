@@ -1,4 +1,6 @@
 from src.task.BaseJumpTask import BaseJumpTask
+from src.task.AutoLoginTask import AutoLoginTask
+from src.task.AutoTutorialTask import AutoTutorialTask
 
 
 class TestAllInOneTask(BaseJumpTask):
@@ -14,18 +16,22 @@ class TestAllInOneTask(BaseJumpTask):
         self.logger.info("开始执行测试一条龙任务")
         self.logger.info("=" * 60)
         
-        # 任务执行顺序
+        # 任务执行顺序 (任务类, 任务名称)
         tasks_sequence = [
-            ('自动登录', self._run_auto_login),
-            ('自动新手教程', self._run_auto_tutorial),
+            (AutoLoginTask, '自动登录'),
+            (AutoTutorialTask, '自动新手教程'),
         ]
         
         success_count = 0
         
-        for task_name, task_func in tasks_sequence:
+        for task_class, task_name in tasks_sequence:
             try:
                 self.logger.info(f"\n▶ 开始执行: {task_name}")
-                if task_func():
+                
+                # 使用框架提供的 run_task_by_class 方法运行子任务
+                result = self.run_task_by_class(task_class)
+                
+                if result:
                     self.logger.info(f"✅ {task_name} 执行成功")
                     success_count += 1
                 else:
@@ -41,33 +47,3 @@ class TestAllInOneTask(BaseJumpTask):
         self.logger.info("=" * 60)
         
         return success_count == len(tasks_sequence)
-    
-    def _run_auto_login(self):
-        """执行自动登录任务"""
-        try:
-            from src.task.AutoLoginTask import AutoLoginTask
-            
-            # 创建并执行自动登录任务实例，传递相同的上下文
-            login_task = AutoLoginTask(self.context)
-            login_task.logger = self.logger  # 共享日志器
-            login_task.set_caller(self)  # 标记调用关系
-            
-            return login_task.run()
-        except Exception as e:
-            self.logger.error(f"自动登录任务执行失败: {e}")
-            return False
-    
-    def _run_auto_tutorial(self):
-        """执行自动新手教程任务"""
-        try:
-            from src.task.AutoTutorialTask import AutoTutorialTask
-            
-            # 创建并执行自动新手教程任务实例，传递相同的上下文
-            tutorial_task = AutoTutorialTask(self.context)
-            tutorial_task.logger = self.logger  # 共享日志器
-            tutorial_task.set_caller(self)  # 标记调用关系
-            
-            return tutorial_task.run()
-        except Exception as e:
-            self.logger.error(f"自动新手教程任务执行失败: {e}")
-            return False
