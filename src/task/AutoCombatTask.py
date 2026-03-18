@@ -202,6 +202,7 @@ class AutoCombatTask(BaseJumpTriggerTask):
         1. 死亡状态检测（并行线程持续监控）
         2. 自身检测（15秒超时）
         3. 战场状态判断（4种情况）
+        4. 持续更新距离给技能控制器
         """
         verbose = self.config.get('详细日志', False)
         
@@ -257,6 +258,13 @@ class AutoCombatTask(BaseJumpTriggerTask):
                 if verbose:
                     self._log_battlefield_details(state, self_pos, allies, enemies)
                 
+                # ======== 第四步：更新距离给技能控制器 ========
+                if enemies:
+                    nearest_enemy = self._get_nearest_target(self_pos, enemies)
+                    if nearest_enemy:
+                        distance = self.distance_calc.calculate(self_pos, nearest_enemy)
+                        self.skill_ctrl.update_distance(distance)
+                
                 # 根据战场状态处理（传递已检测的单位信息）
                 self._handle_battlefield_state(state, self_pos, allies, enemies)
                 
@@ -309,6 +317,12 @@ class AutoCombatTask(BaseJumpTriggerTask):
             allies: 已检测的友方列表
             enemies: 已检测的敌方列表
         """
+        # 关键：有敌人时启动技能，无敌人时停止技能
+        if enemies:
+            self.skill_ctrl.start_auto_skills()
+        else:
+            self.skill_ctrl.stop_auto_skills()
+        
         if state == BattlefieldState.NO_UNITS:
             self._handle_no_units()
         elif state == BattlefieldState.ALLIES_ONLY:
@@ -416,7 +430,7 @@ class AutoCombatTask(BaseJumpTriggerTask):
         """
         情况2：仅有友方、无敌军
         
-        向友方移动，保持距离100~200像素
+        向友方移动，保持距离0~250像素
         强制关闭自动技能
         
         Args:
@@ -493,9 +507,13 @@ class AutoCombatTask(BaseJumpTriggerTask):
         """
         情况3：仅有敌军、无友方
             
-        向敌军移动，保持距离100~200像素
-        距离达标后 → 启动自动技能
-        距离不达标 → 持续移动直到距离达标或超时
+        向敌军移动，保持距离0~250像素
+        技能释放由独立线程根据距离自动处理
+        
+        优化：
+        - 移动过程中实时检测距离
+        - 一旦距离进入0-250px范围，立即中断移动
+        - 移动过程中持续更新帧和距离给技能控制器
             
         目标锁定机制：
         - 选择最近的敌人作为目标后锁定
@@ -513,6 +531,8 @@ class AutoCombatTask(BaseJumpTriggerTask):
         if not target:
             self.logger.warning("敌军列表为空，无法获取目标")
             return
+        
+        # 注意：技能已在 _handle_battlefield_state 中启动
             
         # 锁定目标：记录目标的大致位置区域，用于后续识别同一目标
         locked_target_center = (target.center_x, target.center_y)
@@ -540,7 +560,6 @@ class AutoCombatTask(BaseJumpTriggerTask):
             # 检查死亡状态
             if self.state_detector.is_death_detected():
                 self.logger.warning("检测到死亡状态，停止移动")
-                self.skill_ctrl.stop_auto_skills()
                 self.movement_ctrl.stop()
                 return
                 
@@ -593,47 +612,96 @@ class AutoCombatTask(BaseJumpTriggerTask):
                 
             # 计算当前距离
             distance = self.distance_calc.calculate(current_self, target)
+            
+            # 更新距离给技能控制器（独立线程会根据距离判断是否释放技能）
+            self.skill_ctrl.update_distance(distance)
                 
             if self.distance_calc.is_in_optimal_range(distance):
-                # 距离达标，启动自动技能
-                self.logger.info(f"距离达标({distance:.0f}px)，启动自动技能")
-                self.skill_ctrl.start_auto_skills()
-                self.skill_ctrl.update()
+                # 距离达标，停止移动，技能由独立线程处理
+                self.logger.info(f"距离达标({distance:.0f}px)，保持位置，技能持续释放")
                 self.movement_ctrl.stop()
                 return
             else:
                 # 距离不达标，执行移动
                 direction = self.distance_calc.get_movement_direction(current_self, target, distance)
+                keys = self._calculate_movement_keys(current_self, target, direction)
                     
-                if direction == "towards":
-                    self.logger.debug(f"距离{distance:.0f}px > 200px，靠近目标 "
-                                   f"(自身:{current_self.center_x:.0f},{current_self.center_y:.0f} -> "
-                                   f"目标:{target.center_x:.0f},{target.center_y:.0f})")
-                    self.movement_ctrl.move_towards(
-                        target.center_x, target.center_y,
-                        current_self.center_x, current_self.center_y
-                    )
-                elif direction == "away":
-                    self.logger.debug(f"距离{distance:.0f}px < 100px，远离目标 "
-                                   f"(自身:{current_self.center_x:.0f},{current_self.center_y:.0f} <- "
-                                   f"目标:{target.center_x:.0f},{target.center_y:.0f})")
-                    self.movement_ctrl.move_away(
-                        target.center_x, target.center_y,
-                        current_self.center_x, current_self.center_y
-                    )
+                if keys:
+                    # 使用可中断移动，在移动过程中实时检测距离
+                    def should_stop_moving():
+                        """检测是否应该停止移动（距离进入0-250px范围）"""
+                        # 更新帧
+                        self.next_frame()
+                        
+                        # 重新检测自身和敌人
+                        new_self = self.state_detector.detect_self_once()
+                        new_enemies = self.state_detector.detect_enemies()
+                        
+                        if new_self and new_enemies:
+                            new_target = self._get_nearest_target(new_self, new_enemies)
+                            if new_target:
+                                new_distance = self.distance_calc.calculate(new_self, new_target)
+                                # 更新距离给技能控制器
+                                self.skill_ctrl.update_distance(new_distance)
+                                
+                                # 如果距离进入0-250px范围，停止移动
+                                if self.distance_calc.is_in_optimal_range(new_distance):
+                                    self.logger.info(f"[移动中断] 距离达标({new_distance:.0f}px)")
+                                    return True
+                        return False
                     
-                # 停止自动技能（移动中不释放技能）
-                self.skill_ctrl.stop_auto_skills()
-            
+                    # 执行可中断移动
+                    interrupted = self.movement_ctrl.move_with_interrupt_check(keys, should_stop_moving)
+                    
+                    if interrupted:
+                        # 移动被中断，说明距离已达标
+                        self.movement_ctrl.stop()
+                        return
+                    
         # 超时后仍未达标，记录警告
         self.logger.warning(f"距离调整超时({max_adjust_time}秒)，当前距离: {distance:.0f}px")
+    
+    def _calculate_movement_keys(self, self_pos, target, direction):
+        """
+        计算移动按键
+        
+        Args:
+            self_pos: 自身位置
+            target: 目标位置
+            direction: 移动方向 ("towards" 或 "away")
+            
+        Returns:
+            list: 需要按下的键列表
+        """
+        import math
+        
+        if direction == "towards":
+            dx = target.center_x - self_pos.center_x
+            dy = target.center_y - self_pos.center_y
+            self.logger.debug(f"距离{self.distance_calc.calculate(self_pos, target):.0f}px > 250px，靠近目标")
+        elif direction == "away":
+            dx = self_pos.center_x - target.center_x
+            dy = self_pos.center_y - target.center_y
+            self.logger.debug(f"距离{self.distance_calc.calculate(self_pos, target):.0f}px < 0px，远离目标")
+        else:
+            return []
+        
+        keys = []
+        THRESHOLD = 30
+        
+        if abs(dx) >= THRESHOLD:
+            keys.append('D' if dx > 0 else 'A')
+        if abs(dy) >= THRESHOLD:
+            keys.append('S' if dy > 0 else 'W')
+        
+        return keys
     
     def _handle_mixed(self, self_pos, allies, enemies):
         """
         情况4：友方+敌军都存在
         
-        优先向敌军移动，保持距离100~200像素
-        距离达标后 → 启动自动技能
+        优先向敌军移动，保持距离0~250像素
+        距离达标后 → 自动技能持续释放
         
         Args:
             self_pos: 自身位置
@@ -647,11 +715,11 @@ class AutoCombatTask(BaseJumpTriggerTask):
     
     def _maintain_distance(self, self_pos, target):
         """
-        统一距离逻辑：保持100~200像素距离
+        统一距离逻辑：保持0~250像素距离
         
-        1. 距离在100~200像素之间 → 停止移动，保持位置
-        2. 距离 < 100像素 → 反向移动，远离目标
-        3. 距离 > 200像素 → 正向移动，靠近目标
+        1. 距离在0~250像素之间 → 停止移动，保持位置
+        2. 距离 < 0像素 → 反向移动，远离目标（理论上不会发生）
+        3. 距离 > 250像素 → 正向移动，靠近目标
         
         Args:
             self_pos: 自身位置
@@ -661,13 +729,13 @@ class AutoCombatTask(BaseJumpTriggerTask):
         direction = self.distance_calc.get_movement_direction(self_pos, target, distance)
         
         if direction == "towards":
-            self.logger.info(f"➡️ 距离{distance:.0f}px > 200px，靠近目标")
+            self.logger.info(f"➡️ 距离{distance:.0f}px > 250px，靠近目标")
             self.movement_ctrl.move_towards(
                 target.center_x, target.center_y,
                 self_pos.center_x, self_pos.center_y
             )
         elif direction == "away":
-            self.logger.info(f"⬅️ 距离{distance:.0f}px < 100px，远离目标")
+            self.logger.info(f"⬅️ 距离{distance:.0f}px < 0px，远离目标")
             self.movement_ctrl.move_away(
                 target.center_x, target.center_y,
                 self_pos.center_x, self_pos.center_y
@@ -682,11 +750,13 @@ class AutoCombatTask(BaseJumpTriggerTask):
         if self.state_detector:
             self.state_detector.stop_death_monitor()
         
-        # 停止移动和技能
+        # 停止移动
         if self.movement_ctrl:
             self.movement_ctrl.stop()
+        
+        # 关闭技能控制器（停止独立线程）
         if self.skill_ctrl:
-            self.skill_ctrl.stop_auto_skills()
+            self.skill_ctrl.shutdown()
         
         self.logger.info("自动战斗任务清理完成")
 

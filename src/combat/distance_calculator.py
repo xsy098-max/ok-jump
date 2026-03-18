@@ -28,7 +28,7 @@ class DistanceCalculator:
     
     # 最佳攻击距离范围（像素）
     MIN_DISTANCE = 0  # 最小距离
-    MAX_DISTANCE = 200  # 最大距离
+    MAX_DISTANCE = 250  # 最大距离（修改为250px以扩大技能释放范围）
     
     # 边界缓冲区（像素）- 避免在边界值附近频繁切换
     BUFFER = 15

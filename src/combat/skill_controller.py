@@ -9,9 +9,14 @@
 
 支持后台模式：
 - 使用 SendInput 发送按键，支持 Unity 游戏后台操作
+
+优化特性：
+- 独立技能监控线程：持续监控距离并释放技能
+- 独立冷却机制：四个技能各自独立冷却，互不影响
 """
 
 import time
+import threading
 import pydirectinput
 
 from ok import og
@@ -19,6 +24,51 @@ from src.utils.BackgroundInputHelper import background_input
 
 # 禁用 pydirectinput 的安全检查
 pydirectinput.FAILSAFE = False
+
+
+class SkillCooldown:
+    """
+    独立技能冷却器
+    
+    每个技能拥有独立的冷却计时器，互不影响
+    """
+    
+    def __init__(self, interval: float = 1.0):
+        """
+        初始化冷却器
+        
+        Args:
+            interval: 冷却间隔（秒）
+        """
+        self.interval = interval
+        self.last_use_time = 0.0
+        self._lock = threading.Lock()
+    
+    def can_use(self) -> bool:
+        """检查是否可以使用技能"""
+        with self._lock:
+            return time.time() - self.last_use_time >= self.interval
+    
+    def use(self):
+        """标记技能已使用，开始冷却"""
+        with self._lock:
+            self.last_use_time = time.time()
+    
+    def get_remaining_cooldown(self) -> float:
+        """获取剩余冷却时间"""
+        with self._lock:
+            remaining = self.interval - (time.time() - self.last_use_time)
+            return max(0, remaining)
+    
+    def reset(self):
+        """重置冷却"""
+        with self._lock:
+            self.last_use_time = 0.0
+    
+    def set_interval(self, interval: float):
+        """设置冷却间隔"""
+        with self._lock:
+            self.interval = interval
 
 
 class SkillController:
@@ -67,15 +117,27 @@ class SkillController:
         """
         self.task = task
         
-        # 技能冷却计时
-        self.last_attack = 0
-        self.last_skill1 = 0
-        self.last_skill2 = 0
-        self.last_ultimate = 0
+        # 独立技能冷却器（每个技能独立冷却）
+        self.cooldown_attack = SkillCooldown(0.5)
+        self.cooldown_skill1 = SkillCooldown(2.0)
+        self.cooldown_skill2 = SkillCooldown(3.0)
+        self.cooldown_ultimate = SkillCooldown(5.0)
         
         # 自动技能状态
         self.auto_skill_enabled = False
         self._background_input_initialized = False
+        
+        # 技能监控线程
+        self._skill_thread = None
+        self._skill_thread_running = False
+        
+        # 距离监控相关（由外部设置）
+        self._current_distance = float('inf')
+        self._distance_lock = threading.Lock()
+        
+        # 技能释放范围（0-250px）
+        self.skill_range_max = 250
+        self.skill_range_min = 0
     
     def is_adb(self):
         """检测是否为 ADB 模式（手机端）"""
@@ -137,13 +199,145 @@ class SkillController:
             self.task.logger.error(f"[技能] 释放{skill_name}失败: {e}")
     
     def start_auto_skills(self):
-        """启动自动技能"""
+        """启动自动技能（启动独立监控线程）"""
         self.auto_skill_enabled = True
-        self.task.logger.info("[技能] 自动技能已启动")
+        
+        # 启动技能监控线程
+        if not self._skill_thread_running:
+            self._skill_thread_running = True
+            self._skill_thread = threading.Thread(
+                target=self._skill_monitor_loop,
+                name="SkillMonitorThread",
+                daemon=True
+            )
+            self._skill_thread.start()
+            self.task.logger.info("[技能] 自动技能监控线程已启动")
     
     def stop_auto_skills(self):
-        """停止自动技能"""
+        """停止自动技能（不停止线程，只禁用技能释放）"""
         self.auto_skill_enabled = False
+        # 不停止线程，线程会继续运行但不会释放技能
+    
+    def shutdown(self):
+        """完全关闭技能控制器（停止线程）"""
+        self.auto_skill_enabled = False
+        self._skill_thread_running = False
+        if self._skill_thread and self._skill_thread.is_alive():
+            self._skill_thread.join(timeout=1.0)
+        self.task.logger.info("[技能] 技能控制器已关闭")
+    
+    def update_distance(self, distance: float):
+        """
+        更新当前距离（由外部调用）
+        
+        Args:
+            distance: 与目标的距离（像素）
+        """
+        with self._distance_lock:
+            self._current_distance = distance
+    
+    def get_current_distance(self) -> float:
+        """获取当前距离"""
+        with self._distance_lock:
+            return self._current_distance
+    
+    def is_in_skill_range(self) -> bool:
+        """检查是否在技能释放范围内（0-250px）"""
+        distance = self.get_current_distance()
+        return self.skill_range_min <= distance <= self.skill_range_max
+    
+    def _skill_monitor_loop(self):
+        """
+        技能监控循环（独立线程）
+        
+        持续监控距离，在范围内时独立释放各技能
+        每个技能独立冷却，互不影响
+        """
+        self.task.logger.info("[技能] 技能监控循环开始")
+        log_counter = 0  # 用于定期输出状态
+        
+        while self._skill_thread_running:
+            try:
+                # 检查自动技能是否启用
+                if not self.auto_skill_enabled:
+                    time.sleep(0.05)
+                    continue
+                
+                # 获取当前距离
+                distance = self.get_current_distance()
+                
+                # 每50次循环输出一次状态（约1秒）
+                log_counter += 1
+                if log_counter >= 50:
+                    log_counter = 0
+                    self.task.logger.info(f"[技能] 状态检查 - 距离: {distance:.0f}px, "
+                                         f"范围内: {self.is_in_skill_range()}, "
+                                         f"普攻启用: {self._is_skill_enabled('自动普攻')}")
+                
+                # 检查是否在技能释放范围内
+                if not self.is_in_skill_range():
+                    time.sleep(0.02)
+                    continue
+                
+                # 独立检查并释放各技能（每个技能独立冷却）
+                self._try_release_skills()
+                
+                # 短暂休眠，避免CPU占用过高
+                time.sleep(0.02)
+                
+            except Exception as e:
+                self.task.logger.error(f"[技能] 监控循环异常: {e}")
+                time.sleep(0.1)
+        
+        self.task.logger.info("[技能] 技能监控循环结束")
+    
+    def _try_release_skills(self):
+        """
+        尝试释放各技能（独立冷却判断）
+        
+        每个技能独立检查冷却，互不影响
+        """
+        # 更新冷却间隔（从配置读取）
+        self._update_cooldown_intervals()
+        
+        # 普攻（独立冷却）
+        if self._is_skill_enabled('自动普攻'):
+            if self.cooldown_attack.can_use():
+                self.do_attack()
+                self.cooldown_attack.use()
+        
+        # 技能1（独立冷却）
+        if self._is_skill_enabled('自动技能1'):
+            if self.cooldown_skill1.can_use():
+                self.do_skill1()
+                self.cooldown_skill1.use()
+        
+        # 技能2（独立冷却）
+        if self._is_skill_enabled('自动技能2'):
+            if self.cooldown_skill2.can_use():
+                self.do_skill2()
+                self.cooldown_skill2.use()
+        
+        # 大招（独立冷却）
+        if self._is_skill_enabled('自动大招'):
+            if self.cooldown_ultimate.can_use():
+                self.do_ultimate()
+                self.cooldown_ultimate.use()
+    
+    def _update_cooldown_intervals(self):
+        """从配置更新冷却间隔"""
+        self.cooldown_attack.set_interval(
+            self._get_skill_interval('普攻间隔(秒)', 0.5)
+        )
+        self.cooldown_skill1.set_interval(
+            self._get_skill_interval('技能1间隔(秒)', 2.0)
+        )
+        self.cooldown_skill2.set_interval(
+            self._get_skill_interval('技能2间隔(秒)', 3.0)
+        )
+        self.cooldown_ultimate.set_interval(
+            self._get_skill_interval('大招间隔(秒)', 5.0)
+        )
     
     def is_auto_skill_enabled(self):
         """检查自动技能是否启用"""
@@ -210,43 +404,14 @@ class SkillController:
     
     def update(self):
         """
-        更新技能释放
+        更新技能释放（兼容旧接口）
         
-        在自动技能启用时调用，按照配置间隔释放技能
-        严格遵循GUI设置：先检查开关，再检查冷却，最后释放
+        注意：新的技能释放由独立线程 _skill_monitor_loop 处理
+        此方法主要用于更新距离信息
         """
-        if not self.auto_skill_enabled:
-            return
-        
-        current_time = time.time()
-        
-        # 自动普攻
-        if self._is_skill_enabled('自动普攻'):
-            interval = self._get_skill_interval('普攻间隔(秒)', 0.5)
-            if current_time - self.last_attack >= interval:
-                self.do_attack()
-                self.last_attack = current_time
-        
-        # 自动技能1
-        if self._is_skill_enabled('自动技能1'):
-            interval = self._get_skill_interval('技能1间隔(秒)', 2.0)
-            if current_time - self.last_skill1 >= interval:
-                self.do_skill1()
-                self.last_skill1 = current_time
-        
-        # 自动技能2
-        if self._is_skill_enabled('自动技能2'):
-            interval = self._get_skill_interval('技能2间隔(秒)', 3.0)
-            if current_time - self.last_skill2 >= interval:
-                self.do_skill2()
-                self.last_skill2 = current_time
-        
-        # 自动大招
-        if self._is_skill_enabled('自动大招'):
-            interval = self._get_skill_interval('大招间隔(秒)', 5.0)
-            if current_time - self.last_ultimate >= interval:
-                self.do_ultimate()
-                self.last_ultimate = current_time
+        # 不再在此处释放技能，由独立线程处理
+        # 此方法保留以兼容旧代码
+        pass
     
     def do_attack(self):
         """释放普通攻击"""
@@ -304,10 +469,10 @@ class SkillController:
     
     def reset_cooldowns(self):
         """重置所有技能冷却计时"""
-        self.last_attack = 0
-        self.last_skill1 = 0
-        self.last_skill2 = 0
-        self.last_ultimate = 0
+        self.cooldown_attack.reset()
+        self.cooldown_skill1.reset()
+        self.cooldown_skill2.reset()
+        self.cooldown_ultimate.reset()
     
     def get_skill_status(self):
         """
@@ -316,31 +481,30 @@ class SkillController:
         Returns:
             dict: 技能状态字典
         """
-        current_time = time.time()
         return {
             '普攻': {
                 '启用': self._is_skill_enabled('自动普攻'),
                 '按键': self._get_hotkey_config('普通攻击', 'J'),
                 '间隔': self._get_skill_interval('普攻间隔(秒)', 0.5),
-                '冷却剩余': max(0, self._get_skill_interval('普攻间隔(秒)', 0.5) - (current_time - self.last_attack)),
+                '冷却剩余': self.cooldown_attack.get_remaining_cooldown(),
             },
             '技能1': {
                 '启用': self._is_skill_enabled('自动技能1'),
                 '按键': self._get_hotkey_config('技能1', 'K'),
                 '间隔': self._get_skill_interval('技能1间隔(秒)', 2.0),
-                '冷却剩余': max(0, self._get_skill_interval('技能1间隔(秒)', 2.0) - (current_time - self.last_skill1)),
+                '冷却剩余': self.cooldown_skill1.get_remaining_cooldown(),
             },
             '技能2': {
                 '启用': self._is_skill_enabled('自动技能2'),
                 '按键': self._get_hotkey_config('技能2', 'U'),
                 '间隔': self._get_skill_interval('技能2间隔(秒)', 3.0),
-                '冷却剩余': max(0, self._get_skill_interval('技能2间隔(秒)', 3.0) - (current_time - self.last_skill2)),
+                '冷却剩余': self.cooldown_skill2.get_remaining_cooldown(),
             },
             '大招': {
                 '启用': self._is_skill_enabled('自动大招'),
                 '按键': self._get_hotkey_config('大招', 'L'),
                 '间隔': self._get_skill_interval('大招间隔(秒)', 5.0),
-                '冷却剩余': max(0, self._get_skill_interval('大招间隔(秒)', 5.0) - (current_time - self.last_ultimate)),
+                '冷却剩余': self.cooldown_ultimate.get_remaining_cooldown(),
             },
         }
 

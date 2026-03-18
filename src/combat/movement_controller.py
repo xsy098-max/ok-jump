@@ -345,6 +345,75 @@ class MovementController:
             self.task.logger.error(traceback.format_exc())
             raise
 
+    def move_with_interrupt_check(self, keys, should_stop_callback, check_interval=0.05):
+        """
+        可中断的移动：在移动过程中定期检测是否应该停止
+        
+        Args:
+            keys: 需要按下的键列表
+            should_stop_callback: 回调函数，返回 True 时立即停止移动
+            check_interval: 检测间隔（秒），默认 0.05 秒
+            
+        Returns:
+            bool: True 表示被中断停止，False 表示正常完成
+        """
+        if not keys:
+            return False
+
+        # ADB 模式：暂时不支持中断，使用普通移动
+        if self.is_adb():
+            self._press_movement_keys_adb(keys, self.move_duration)
+            return False
+
+        # 只有方向改变时才停止（减少停顿）
+        if self._current_direction is not None and self._current_direction != keys:
+            self._stop_pc()
+
+        key_str = '+'.join(keys)
+        self.task.logger.debug(f"[移动] 可中断移动: {key_str}, 最大持续 {self.move_duration}秒")
+
+        try:
+            # 按下按键
+            for key in keys:
+                self.task.send_key_down(key)
+            
+            self._current_direction = keys
+            self._is_moving = True
+            
+            # 分段检测是否应该停止
+            elapsed = 0.0
+            interrupted = False
+            
+            while elapsed < self.move_duration:
+                # 短暂休眠
+                sleep_time = min(check_interval, self.move_duration - elapsed)
+                time.sleep(sleep_time)
+                elapsed += sleep_time
+                
+                # 检测是否应该停止
+                if should_stop_callback():
+                    interrupted = True
+                    self.task.logger.info(f"[移动] 检测到停止条件，中断移动 (已移动 {elapsed:.2f}秒)")
+                    break
+            
+            # 释放按键
+            for key in keys:
+                self.task.send_key_up(key)
+            
+            self._is_moving = False
+            return interrupted
+
+        except Exception as e:
+            self.task.logger.error(f"[移动] 可中断移动异常: {e}")
+            # 确保释放按键
+            for key in keys:
+                try:
+                    self.task.send_key_up(key)
+                except:
+                    pass
+            self._is_moving = False
+            raise
+
     def _press_movement_keys_for_duration(self, keys, duration):
         """
         按下移动键并持续指定时间（用于随机移动搜索）

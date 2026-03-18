@@ -448,6 +448,91 @@ class Phase1Handler:
         self._log("向下移动完成")
         self.state_machine.transition_to(TutorialState.COMBAT_TRIGGER)
     
+    def _get_combat_config(self, key: str, default=None):
+        """
+        从 AutoCombatTask 配置中读取战斗参数
+        
+        确保新手教程中的自动战斗使用用户在GUI中配置的参数
+        
+        Args:
+            key: 配置键名
+            default: 默认值
+            
+        Returns:
+            配置值
+        """
+        # 优先从全局配置中获取 AutoCombatTask 的配置
+        try:
+            if og and og.config:
+                combat_config = og.config.get('AutoCombatTask', {})
+                if combat_config and key in combat_config:
+                    return combat_config[key]
+        except Exception:
+            pass
+        
+        # 回退：从配置文件直接读取
+        try:
+            import json
+            import os
+            config_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                'configs', 'AutoCombatTask.json'
+            )
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    combat_config = json.load(f)
+                    if key in combat_config:
+                        return combat_config[key]
+        except Exception:
+            pass
+        
+        return default
+    
+    def _create_combat_config_adapter(self):
+        """
+        创建配置适配器，使 SkillController 能读取 AutoCombatTask 的配置
+        
+        SkillController 期望 task 对象具有 config 属性，
+        此适配器将 config.get() 调用重定向到 _get_combat_config
+        
+        Returns:
+            配置适配器对象
+        """
+        handler = self
+        
+        class CombatConfigAdapter:
+            """战斗配置适配器"""
+            
+            def __init__(self, handler):
+                self._handler = handler
+                # 复制必要的属性给 SkillController 使用
+                self.logger = handler.task.logger
+                self.frame = None  # 将在运行时更新
+                self.executor = handler.task.executor if hasattr(handler.task, 'executor') else None
+            
+            @property
+            def config(self):
+                """返回配置字典，支持 .get() 方法"""
+                return self
+            
+            def get(self, key, default=None):
+                """从 AutoCombatTask 配置读取"""
+                return handler._get_combat_config(key, default)
+            
+            def send_key(self, key):
+                """转发按键操作"""
+                return handler.task.send_key(key)
+            
+            def is_adb(self):
+                """检查是否为 ADB 模式"""
+                return handler.task.is_adb() if hasattr(handler.task, 'is_adb') else False
+            
+            def update_frame(self):
+                """更新帧引用"""
+                self.frame = handler.task.frame
+        
+        return CombatConfigAdapter(self)
+    
     def _handle_combat_trigger(self):
         """处理自动战斗触发"""
         self._log("新手教程第一阶段完成，启动自动战斗...")
@@ -462,7 +547,22 @@ class Phase1Handler:
             # 初始化战斗控制器
             state_detector = StateDetector(self.task)
             state_detector.set_verbose(self._verbose)
-            skill_ctrl = SkillController(self.task)
+            
+            # 创建配置适配器，使 SkillController 能读取 AutoCombatTask 的配置
+            combat_config_adapter = self._create_combat_config_adapter()
+            skill_ctrl = SkillController(combat_config_adapter)
+            
+            # 输出当前战斗配置（详细日志模式）
+            if self._verbose:
+                self._log("自动战斗配置（从AutoCombatTask继承）:")
+                self._log(f"  自动普攻: {self._get_combat_config('自动普攻', True)}")
+                self._log(f"  自动技能1: {self._get_combat_config('自动技能1', True)}")
+                self._log(f"  自动技能2: {self._get_combat_config('自动技能2', True)}")
+                self._log(f"  自动大招: {self._get_combat_config('自动大招', True)}")
+                self._log(f"  普攻间隔: {self._get_combat_config('普攻间隔(秒)', 0.5)}秒")
+                self._log(f"  技能1间隔: {self._get_combat_config('技能1间隔(秒)', 2.0)}秒")
+                self._log(f"  技能2间隔: {self._get_combat_config('技能2间隔(秒)', 3.0)}秒")
+                self._log(f"  大招间隔: {self._get_combat_config('大招间隔(秒)', 5.0)}秒")
             
             # 启动死亡状态并行监控
             state_detector.start_death_monitor()
@@ -486,6 +586,7 @@ class Phase1Handler:
                 
                 # 更新帧
                 self.task.next_frame()
+                combat_config_adapter.update_frame()  # 同步帧到适配器
                 
                 # 死亡状态检测
                 if state_detector.is_death_detected():
