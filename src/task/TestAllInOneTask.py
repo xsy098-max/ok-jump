@@ -9,35 +9,38 @@ from src.task.DailyTask import DailyTask
 class TestAllInOneTask(BaseJumpTask):
     """测试一条龙任务 - 可选择执行多个任务"""
     
-    default_config = {
-        '启用': True,
-        '执行自动登录': True,
-        '执行自动新手教程': True,
-        '执行自动匹配': False,
-        '执行自动战斗': False,
-        '执行日常任务': False,
-    }
-    
-    config_description = {
-        '执行自动登录': '开启后将执行自动登录任务',
-        '执行自动新手教程': '开启后将执行自动新手教程任务',
-        '执行自动匹配': '开启后将执行自动匹配任务',
-        '执行自动战斗': '开启后将执行自动战斗任务',
-        '执行日常任务': '开启后将执行日常任务',
-    }
-    
-    config_type = {
-        '执行自动登录': {'type': 'switch_button'},
-        '执行自动新手教程': {'type': 'switch_button'},
-        '执行自动匹配': {'type': 'switch_button'},
-        '执行自动战斗': {'type': 'switch_button'},
-        '执行日常任务': {'type': 'switch_button'},
-    }
-    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.name = "TestAllInOneTask"
         self.description = "测试一条龙 - 可选择执行多个任务"
+        
+        # 默认配置 - 必须在 __init__ 中定义为实例属性
+        self.default_config = {
+            '启用': True,
+            '执行自动登录': True,
+            '执行自动新手教程': True,
+            '执行自动匹配': False,
+            '执行自动战斗': False,
+            '执行日常任务': False,
+        }
+        
+        # 配置描述
+        self.config_description = {
+            '执行自动登录': '开启后将执行自动登录任务',
+            '执行自动新手教程': '开启后将执行自动新手教程任务',
+            '执行自动匹配': '开启后将执行自动匹配任务',
+            '执行自动战斗': '开启后将执行自动战斗任务',
+            '执行日常任务': '开启后将执行日常任务',
+        }
+        
+        # 配置类型
+        self.config_type = {
+            '执行自动登录': {'type': 'switch_button'},
+            '执行自动新手教程': {'type': 'switch_button'},
+            '执行自动匹配': {'type': 'switch_button'},
+            '执行自动战斗': {'type': 'switch_button'},
+            '执行日常任务': {'type': 'switch_button'},
+        }
         
     def run(self):
         self.logger.info("=" * 60)
