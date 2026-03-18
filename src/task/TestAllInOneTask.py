@@ -33,15 +33,6 @@ class TestAllInOneTask(BaseJumpTask):
             '执行日常任务': '开启后将执行日常任务',
         }
         
-        # 配置类型
-        self.config_type = {
-            '执行自动登录': {'type': 'switch_button'},
-            '执行自动新手教程': {'type': 'switch_button'},
-            '执行自动匹配': {'type': 'switch_button'},
-            '执行自动战斗': {'type': 'switch_button'},
-            '执行日常任务': {'type': 'switch_button'},
-        }
-        
     def run(self):
         self.logger.info("=" * 60)
         self.logger.info("开始执行测试一条龙任务")
