@@ -51,6 +51,26 @@ def patch_start_controller():
     logger.info('StartController patched: skip_pos_check support enabled')
 
 
+def patch_task_buttons_alignment():
+    """
+    Patch TaskButtons to fix button alignment issue
+    Set a minimum width for the button container to ensure alignment
+    """
+    from ok.gui.tasks.TaskCard import TaskButtons
+    logger = Logger.get_logger(__name__)
+    
+    original_init_ui = TaskButtons.init_ui
+    
+    def patched_init_ui(self):
+        original_init_ui(self)
+        # Set minimum width to ensure buttons are aligned across all task cards
+        # This accounts for the maximum button combination (Start + Stop + Pause)
+        self.setMinimumWidth(280)
+    
+    TaskButtons.init_ui = patched_init_ui
+    logger.info('TaskButtons patched: button alignment fixed')
+
+
 def smart_device_selection():
     """
     智能设备选择
@@ -99,8 +119,9 @@ StartCard.export_logs = staticmethod(export_logs)
 if __name__ == '__main__':
     # Smart device selection (MUST be before OK(config)!)
     smart_device_selection()
-    # Apply patch before starting
+    # Apply patches before starting
     patch_start_controller()
+    patch_task_buttons_alignment()
     # Initialize OK framework (will read devices.json)
     ok = OK(config)
     ok.start()
