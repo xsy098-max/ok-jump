@@ -47,6 +47,9 @@ class SkillCooldown:
     def can_use(self) -> bool:
         """检查是否可以使用技能"""
         with self._lock:
+            # 如果 interval 无效，默认可以使用
+            if self.interval is None or not isinstance(self.interval, (int, float)):
+                return True
             return time.time() - self.last_use_time >= self.interval
     
     def use(self):
@@ -57,6 +60,9 @@ class SkillCooldown:
     def get_remaining_cooldown(self) -> float:
         """获取剩余冷却时间"""
         with self._lock:
+            # 如果 interval 无效，返回 0
+            if self.interval is None or not isinstance(self.interval, (int, float)):
+                return 0
             remaining = self.interval - (time.time() - self.last_use_time)
             return max(0, remaining)
     
@@ -68,7 +74,9 @@ class SkillCooldown:
     def set_interval(self, interval: float):
         """设置冷却间隔"""
         with self._lock:
-            self.interval = interval
+            # 忽略 None 或无效值
+            if interval is not None and isinstance(interval, (int, float)) and interval > 0:
+                self.interval = interval
 
 
 class SkillController:
@@ -141,7 +149,29 @@ class SkillController:
     
     def is_adb(self):
         """检测是否为 ADB 模式（手机端）"""
-        return hasattr(self.task, 'is_adb') and self.task.is_adb()
+        try:
+            # 检查 task 是否有 is_adb 方法
+            if not hasattr(self.task, 'is_adb'):
+                return False
+            
+            # 检查 executor 是否存在
+            if hasattr(self.task, 'executor') and self.task.executor is None:
+                return False
+            
+            # 调用 is_adb 方法
+            result = self.task.is_adb()
+            
+            # 确保返回值是布尔类型
+            if not isinstance(result, bool):
+                return False
+            
+            return result
+        except Exception as e:
+            try:
+                self.task.logger.debug(f"[技能] is_adb() 异常: {e}")
+            except Exception:
+                pass
+            return False
     
     def _init_background_input(self):
         """初始化后台输入助手"""
@@ -240,8 +270,10 @@ class SkillController:
         更新当前距离（由外部调用）
         
         Args:
-            distance: 与目标的距离（像素）
+            distance: 与目标的距离（像素），None 值将被忽略
         """
+        if distance is None:
+            return  # 忽略 None 值，保持原值
         with self._distance_lock:
             self._current_distance = distance
     
@@ -253,6 +285,9 @@ class SkillController:
     def is_in_skill_range(self) -> bool:
         """检查是否在技能释放范围内（0-250px）"""
         distance = self.get_current_distance()
+        # 处理 None 或无效距离值
+        if distance is None or not isinstance(distance, (int, float)):
+            return False
         return self.skill_range_min <= distance <= self.skill_range_max
     
     def _skill_monitor_loop(self):
@@ -283,7 +318,9 @@ class SkillController:
                 if log_counter >= 50:
                     log_counter = 0
                     try:
-                        self.task.logger.info(f"[技能] 状态检查 - 距离: {distance:.0f}px, "
+                        # 处理 distance 可能为 None 的情况
+                        distance_str = f"{distance:.0f}px" if distance is not None and isinstance(distance, (int, float)) else "未知"
+                        self.task.logger.info(f"[技能] 状态检查 - 距离: {distance_str}, "
                                              f"范围内: {self.is_in_skill_range()}, "
                                              f"普攻启用: {self._is_skill_enabled('自动普攻')}")
                     except Exception:
@@ -303,7 +340,9 @@ class SkillController:
                 
             except Exception as e:
                 try:
+                    import traceback
                     self.task.logger.error(f"[技能] 监控循环异常: {e}")
+                    self.task.logger.error(f"[技能] 异常堆栈:\n{traceback.format_exc()}")
                 except Exception:
                     pass
                 time.sleep(0.1)
@@ -455,57 +494,88 @@ class SkillController:
     
     def do_attack(self):
         """释放普通攻击"""
-        if self.is_adb():
+        is_adb_mode = self.is_adb()
+        if is_adb_mode:
+            # ADB 模式：尝试点击屏幕按钮，同时发送键盘按键作为备选
             self._click_skill_button('attack')
+            # 同时发送键盘按键（ADB 模式下键盘也可能有效）
+            key = self._get_hotkey_config('普通攻击', 'J')
+            self._send_skill_key(key, '普通攻击')
         else:
             key = self._get_hotkey_config('普通攻击', 'J')
             self._send_skill_key(key, '普通攻击')
     
     def do_skill1(self):
         """释放技能1"""
-        if self.is_adb():
+        is_adb_mode = self.is_adb()
+        if is_adb_mode:
             self._click_skill_button('skill1')
+            key = self._get_hotkey_config('技能1', 'K')
+            self._send_skill_key(key, '技能1')
         else:
             key = self._get_hotkey_config('技能1', 'K')
             self._send_skill_key(key, '技能1')
     
     def do_skill2(self):
         """释放技能2"""
-        if self.is_adb():
+        is_adb_mode = self.is_adb()
+        if is_adb_mode:
             self._click_skill_button('skill2')
+            key = self._get_hotkey_config('技能2', 'U')
+            self._send_skill_key(key, '技能2')
         else:
             key = self._get_hotkey_config('技能2', 'U')
             self._send_skill_key(key, '技能2')
     
     def do_ultimate(self):
         """释放大招"""
-        if self.is_adb():
+        is_adb_mode = self.is_adb()
+        if is_adb_mode:
             self._click_skill_button('ultimate')
+            key = self._get_hotkey_config('大招', 'L')
+            self._send_skill_key(key, '大招')
         else:
             key = self._get_hotkey_config('大招', 'L')
             self._send_skill_key(key, '大招')
     
     def _click_skill_button(self, skill_type):
         """
-        点击技能按钮（手机端）
+        点击技能按钮（手机端/ADB模式）
+        
+        注意：此方法在 ADB 模式下可能因帧问题失败，
+        失败时静默跳过，由键盘按键作为备选方案。
         
         Args:
             skill_type: 技能类型 ('attack', 'skill1', 'skill2', 'ultimate')
         """
-        position = self.MOBILE_SKILL_POSITIONS.get(skill_type)
-        if position is None:
-            return
-        
-        frame = self.task.frame
-        if frame is None:
-            return
-        
-        height, width = frame.shape[:2]
-        x = int(width * position[0])
-        y = int(height * position[1])
-        
-        self.task.click(x, y)
-        self.task.logger.debug(f"点击技能按钮 {skill_type}: ({x}, {y})")
+        try:
+            position = self.MOBILE_SKILL_POSITIONS.get(skill_type)
+            if position is None:
+                return
+            
+            frame = self.task.frame
+            if frame is None:
+                return
+            
+            if not hasattr(frame, 'shape') or frame.shape is None:
+                return
+            
+            height, width = frame.shape[:2]
+            
+            if width is None or height is None or width <= 0 or height <= 0:
+                return
+            
+            x = int(width * position[0])
+            y = int(height * position[1])
+            
+            if x < 0 or y < 0 or x > width or y > height:
+                return
+            
+            self.task.click(x, y)
+            
+        except Exception:
+            # 静默失败，由键盘按键作为备选方案
+            pass
     
     def reset_cooldowns(self):
         """重置所有技能冷却计时"""

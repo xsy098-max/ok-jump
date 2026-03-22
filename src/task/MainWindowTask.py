@@ -54,7 +54,7 @@ class MainWindowTask(BaseJumpTask):
     
     def run(self):
         self.logger.info("=" * 60)
-        self.logger.info("漫画群星：大集结 - 自动化工具 v1.0.0")
+        self.logger.info("漫画群星：大集结 - 自动化工具 v1.1.9")
         self.logger.info("=" * 60)
         self.logger.info("")
         

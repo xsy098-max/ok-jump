@@ -365,11 +365,32 @@ class StateDetector:
         """
         判断战场状态（返回详细信息）
         
+        注意：此方法会先更新帧，确保使用最新的画面进行检测
+        
         Returns:
             tuple: (BattlefieldState, allies_list, enemies_list)
         """
-        allies = self.detect_allies()
-        enemies = self.detect_enemies()
+        # 先更新帧，确保使用最新的画面
+        if hasattr(self.task, 'next_frame'):
+            self.task.next_frame()
+        
+        # 获取当前帧
+        frame = self._get_frame()
+        if frame is None:
+            # 无法获取帧，返回无单位状态
+            return BattlefieldState.NO_UNITS, [], []
+        
+        # 使用同一帧检测友方和敌方（确保一致性）
+        allies = og.my_app.yolo_detect(
+            frame,
+            threshold=0.5,
+            label=CombatLabel.ALLY
+        )
+        enemies = og.my_app.yolo_detect(
+            frame,
+            threshold=0.5,
+            label=CombatLabel.ENEMY
+        )
         
         has_allies = len(allies) > 0
         has_enemies = len(enemies) > 0

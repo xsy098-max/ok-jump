@@ -39,6 +39,7 @@ class Phase1Handler:
         self.movement_ctrl: Optional[MovementController] = None
         self.distance_calc: Optional[DistanceCalculator] = None
         self._verbose = False
+        self._last_enemy_pos = None  # 敌人最后位置 (x, y, timestamp)
     
     def set_verbose(self, verbose: bool):
         """设置详细日志"""
@@ -142,6 +143,9 @@ class Phase1Handler:
                 
                 elif current_state == TutorialState.COMBAT_TRIGGER:
                     self._handle_combat_trigger()
+                
+                elif current_state == TutorialState.PHASE1_END_DETECTION:
+                    self._handle_phase1_end_detection()
                 
                 else:
                     # 未知状态，跳过
@@ -368,53 +372,76 @@ class Phase1Handler:
         # 更新帧数据，确保使用最新截图
         self.task.next_frame()
         
-        # 重新检测目标（快速检测，如果目标消失则立即进入下一阶段）
+        # 重新检测目标
         config = self.character_selector.get_current_config()
         target_type = config.target_type if config else 'target_circle'
         
         if target_type == 'monkey':
+            # 【悟空专用】猴子会移动，可能走出屏幕
+            # 使用较短超时快速检测，检测不到时使用最后位置继续移动
             new_target = self.detector.detect_monkey(timeout=1.0)
-        else:
-            new_target = self.detector.detect_target_circle(timeout=1.0)
-        
-        if new_target:
-            # 目标仍存在，更新位置
-            self._target = new_target
-            self._log(f"目标位置更新: ({new_target.center_x}, {new_target.center_y})")
             
-            # 检测自身位置
-            self_pos = self.detector.detect_self(timeout=5.0)
-            if not self_pos:
-                self._log("无法检测自身位置，使用屏幕中心")
-                frame = self.task.frame
-                self_pos_x = frame.shape[1] // 2
-                self_pos_y = frame.shape[0] // 2
+            if new_target:
+                # 检测到猴子，更新位置并保存最后位置
+                self._target = new_target
+                self._last_monkey_pos = (new_target.center_x, new_target.center_y)
+                self._log(f"猴子位置更新: ({new_target.center_x}, {new_target.center_y})")
+            elif hasattr(self, '_last_monkey_pos') and self._last_monkey_pos:
+                # 未检测到猴子，使用最后位置继续移动
+                self._log(f"猴子未检测到，向最后位置移动: {self._last_monkey_pos}")
             else:
-                self_pos_x = self_pos.center_x
-                self_pos_y = self_pos.center_y
+                # 没有最后位置，跳过本次循环继续尝试
+                self._log("猴子未检测到且无最后位置，继续尝试...")
+                time.sleep(0.1)
+                return
             
-            # 计算距离
-            distance = self.distance_calc.calculate_from_coords(
-                self_pos_x, self_pos_y,
-                self._target.center_x, self._target.center_y
-            )
-            
-            self._log(f"距离目标: {distance:.0f}px, 已移动: {elapsed_time:.1f}秒")
-            
-            # 移动靠近目标
-            self.movement_ctrl.move_towards(
-                self._target.center_x, self._target.center_y,
-                self_pos_x, self_pos_y
-            )
+            # 【悟空专用】在移动期间检测普攻按钮
+            # 如果检测到普攻按钮，说明已进入战斗区域，立即进入下一阶段
+            if self.detector.quick_detect_normal_attack_button():
+                self._log("移动期间检测到普攻按钮，进入普攻按钮检测阶段")
+                self.movement_ctrl.stop()
+                self._move_start_time = None
+                self.state_machine.transition_to(TutorialState.NORMAL_ATTACK_DETECTION)
+                return
         else:
-            # 目标消失（角色已进入目标区域），立即转向普攻按钮检测
-            target_name = '猴子' if target_type == 'monkey' else '目标圈'
-            self._log(f"{target_name}已消失，角色已进入目标区域，转向普攻按钮检测")
-            self.movement_ctrl.stop()
-            # 重置移动计时
-            self._move_start_time = None
-            self.state_machine.transition_to(TutorialState.NORMAL_ATTACK_DETECTION)
-            return
+            # 路飞/小鸣人：目标圈检测（快速检测，目标消失则进入下一阶段）
+            new_target = self.detector.detect_target_circle(timeout=1.0)
+            
+            if new_target:
+                self._target = new_target
+                self._log(f"目标位置更新: ({new_target.center_x}, {new_target.center_y})")
+            else:
+                # 目标圈消失，角色已进入目标区域
+                self._log("目标圈已消失，角色已进入目标区域，转向普攻按钮检测")
+                self.movement_ctrl.stop()
+                self._move_start_time = None
+                self.state_machine.transition_to(TutorialState.NORMAL_ATTACK_DETECTION)
+                return
+        
+        # 检测自身位置
+        self_pos = self.detector.detect_self(timeout=5.0)
+        if not self_pos:
+            self._log("无法检测自身位置，使用屏幕中心")
+            frame = self.task.frame
+            self_pos_x = frame.shape[1] // 2
+            self_pos_y = frame.shape[0] // 2
+        else:
+            self_pos_x = self_pos.center_x
+            self_pos_y = self_pos.center_y
+        
+        # 计算距离
+        distance = self.distance_calc.calculate_from_coords(
+            self_pos_x, self_pos_y,
+            self._target.center_x, self._target.center_y
+        )
+        
+        self._log(f"距离目标: {distance:.0f}px, 已移动: {elapsed_time:.1f}秒")
+        
+        # 移动靠近目标
+        self.movement_ctrl.move_towards(
+            self._target.center_x, self._target.center_y,
+            self_pos_x, self_pos_y
+        )
         
         # 短暂等待后继续循环
         time.sleep(0.1)
@@ -447,7 +474,9 @@ class Phase1Handler:
     
     def _get_combat_config(self, key: str, default=None):
         """
-        从 AutoCombatTask 配置中读取战斗参数（用于其他场景的回退）
+        从 AutoCombatTask 配置中读取战斗参数
+        
+        确保新手教程中的自动战斗使用用户在GUI中配置的参数
         
         Args:
             key: 配置键名
@@ -483,72 +512,136 @@ class Phase1Handler:
         
         return default
     
-    def _handle_combat_trigger(self):
-        """处理自动战斗触发 - 自动战斗与第一阶段结束检测并行运行
+    def _create_combat_config_adapter(self):
+        """
+        创建配置适配器，使 SkillController 能读取 AutoCombatTask 的配置
         
-        流程：
-        1. 启动自动战斗（持续运行）
-        2. 同时启动第一阶段结束检测线程（2分钟超时）
-        3. 检测到 end01.png（"让我们来进行一场实战热身赛"）和 end02.png（"开始对战"按钮）
-        4. 自动点击"开始对战"按钮
-        5. 停止自动战斗，进入第一阶段结束状态
+        SkillController 期望 task 对象具有 config 属性，
+        此适配器将 config.get() 调用重定向到 _get_combat_config
+        
+        Returns:
+            配置适配器对象
+        """
+        handler = self
+        
+        class CombatConfigAdapter:
+            """战斗配置适配器"""
+            
+            def __init__(self, handler):
+                self._handler = handler
+                # 复制必要的属性给 SkillController 使用
+                self.logger = handler.task.logger
+                self.frame = None  # 将在运行时更新
+                self.executor = handler.task.executor if hasattr(handler.task, 'executor') else None
+            
+            @property
+            def config(self):
+                """返回配置字典，支持 .get() 方法"""
+                return self
+            
+            def get(self, key, default=None):
+                """从 AutoCombatTask 配置读取"""
+                return handler._get_combat_config(key, default)
+            
+            def send_key(self, key):
+                """转发按键操作"""
+                return handler.task.send_key(key)
+            
+            def click(self, x, y, after_sleep=None):
+                """转发点击操作（ADB 模式需要）"""
+                return handler.task.click(x, y, after_sleep=after_sleep)
+            
+            def is_adb(self):
+                """检查是否为 ADB 模式（动态检测）"""
+                try:
+                    # 检查 task 是否有 is_adb 方法
+                    if not hasattr(handler.task, 'is_adb'):
+                        return False
+                    
+                    # 检查 executor 是否存在且有效
+                    if not hasattr(handler.task, 'executor') or handler.task.executor is None:
+                        return False
+                    
+                    # 检查 interaction 是否存在
+                    if not hasattr(handler.task.executor, 'interaction') or handler.task.executor.interaction is None:
+                        return False
+                    
+                    # 调用原始 is_adb 方法
+                    result = handler.task.is_adb()
+                    return result
+                except Exception as e:
+                    return False
+            
+            def update_frame(self):
+                """更新帧引用"""
+                self.frame = handler.task.frame
+        
+        return CombatConfigAdapter(self)
+    
+    def _handle_combat_trigger(self):
+        """处理自动战斗触发
+        
+        同时运行自动战斗和第一阶段结束检测，
+        检测到 end01.png 和 end02.png 后直接进入 PHASE1_END。
         """
         self._log("新手教程第一阶段完成，启动自动战斗...")
         
+        # 获取第一阶段结束检测超时配置
+        phase1_end_timeout = self._cfg('第一阶段结束检测超时(秒)', 120.0)
+        
+        # 直接在新手教程任务中运行自动战斗逻辑
         try:
             from src.combat.state_detector import StateDetector
             from src.combat.skill_controller import SkillController
             from src.combat import BattlefieldState
             import random
             
-            # 获取详细日志配置
-            verbose = self._get_combat_config('详细日志', self._verbose)
-            
-            # 输出当前战斗配置
-            self._log("自动战斗配置（从AutoCombatTask继承）:")
-            self._log(f"  自动普攻: {self._get_combat_config('自动普攻', True)}")
-            self._log(f"  自动技能1: {self._get_combat_config('自动技能1', True)}")
-            self._log(f"  自动技能2: {self._get_combat_config('自动技能2', True)}")
-            self._log(f"  自动大招: {self._get_combat_config('自动大招', True)}")
-            self._log(f"  详细日志: {verbose}")
-            
             # 初始化战斗控制器
             state_detector = StateDetector(self.task)
-            state_detector.set_verbose(verbose)
+            state_detector.set_verbose(self._verbose)
             
-            # 创建技能控制器
-            skill_ctrl = SkillController(self.task)
+            # 创建配置适配器，使 SkillController 能读取 AutoCombatTask 的配置
+            combat_config_adapter = self._create_combat_config_adapter()
+            skill_ctrl = SkillController(combat_config_adapter)
+            
+            # 输出当前战斗配置（详细日志模式）
+            if self._verbose:
+                self._log("自动战斗配置（从AutoCombatTask继承）:")
+                self._log(f"  自动普攻: {self._get_combat_config('自动普攻', True)}")
+                self._log(f"  自动技能1: {self._get_combat_config('自动技能1', True)}")
+                self._log(f"  自动技能2: {self._get_combat_config('自动技能2', True)}")
+                self._log(f"  自动大招: {self._get_combat_config('自动大招', True)}")
+                self._log(f"  普攻间隔: {self._get_combat_config('普攻间隔(秒)', 0.5)}秒")
+                self._log(f"  技能1间隔: {self._get_combat_config('技能1间隔(秒)', 2.0)}秒")
+                self._log(f"  技能2间隔: {self._get_combat_config('技能2间隔(秒)', 3.0)}秒")
+                self._log(f"  大招间隔: {self._get_combat_config('大招间隔(秒)', 5.0)}秒")
             
             # 启动死亡状态并行监控
             state_detector.start_death_monitor()
             self._log("死亡状态监控线程已启动")
             
-            # 启动第一阶段结束检测（独立线程，2分钟超时）
-            end_detection_timeout = self._cfg('第一阶段结束检测超时(秒)', 120.0)
-            self.detector.start_phase1_end_detection(end_detection_timeout)
-            self._log(f"第一阶段结束检测线程已启动（超时: {end_detection_timeout}秒）")
+            # 【关键修复】启动第一阶段结束检测线程（并行运行）
+            self.detector.start_phase1_end_detection(phase1_end_timeout)
+            self._log(f"第一阶段结束检测线程已启动（超时: {phase1_end_timeout}秒）")
             
-            # 自动战斗主循环（持续运行直到检测到第一阶段结束）
+            # 自动战斗主循环
             loop_count = 0
             last_state = None
-            start_combat_time = time.time()
+            verbose = self._verbose
+            phase1_end_detected = False
             
             while True:
                 loop_count += 1
                 
+                # 【关键修复】检查是否检测到第一阶段结束
+                if self.detector.is_phase1_end_detected():
+                    self._log("检测到第一阶段结束标志，停止自动战斗")
+                    phase1_end_detected = True
+                    break
+                
                 # 检测退出信号
                 if hasattr(self.task, 'exit_is_set') and self.task.exit_is_set():
                     self._log("检测到退出信号，停止自动战斗")
-                    break
-                
-                # 检查第一阶段是否结束（由独立线程检测）
-                if self.detector.is_phase1_end_detected():
-                    self._log("检测到第一阶段结束标志，停止自动战斗")
-                    break
-                
-                # 检查结束检测是否超时
-                if time.time() - start_combat_time > end_detection_timeout:
-                    self._log_error("第一阶段结束检测超时，停止自动战斗")
                     break
                 
                 # 后台模式：检查并自动伪最小化
@@ -556,6 +649,7 @@ class Phase1Handler:
                 
                 # 更新帧
                 self.task.next_frame()
+                combat_config_adapter.update_frame()  # 同步帧到适配器
                 
                 # 死亡状态检测
                 if state_detector.is_death_detected():
@@ -565,50 +659,68 @@ class Phase1Handler:
                     time.sleep(1)
                     continue
                 
-                # 自身位置检测（缩短超时，避免阻塞太久）
-                self_pos = state_detector.detect_self(timeout=5)
+                # 自身位置检测
+                self_pos = state_detector.detect_self(timeout=15)
                 if self_pos is None:
-                    if verbose and loop_count % 20 == 0:
-                        self._log("未检测到自身位置，继续尝试...")
-                    time.sleep(0.1)
-                    continue
+                    self._log_error("15秒未检测到自身位置，停止自动战斗")
+                    break
                 
                 # 战场状态判断
                 state, allies, enemies = state_detector.get_battlefield_state_detailed()
                 last_state = state.value
                 
-                if verbose and loop_count % 10 == 0:
-                    self._log(f"循环: {loop_count}, 状态: {last_state}, 友方: {len(allies)}, 敌军: {len(enemies)}")
-                
-                # 更新距离给技能控制器
-                if enemies:
-                    nearest_enemy = min(enemies, key=lambda e: self.distance_calc.calculate(self_pos, e))
-                    distance = self.distance_calc.calculate(self_pos, nearest_enemy)
-                    skill_ctrl.update_distance(distance)
-                    if verbose and loop_count % 10 == 0:
-                        self._log(f"更新距离: {distance:.0f}px, 技能范围内: {skill_ctrl.is_in_skill_range()}")
+                # 每次循环都输出详细的战场状态（便于调试随机移动问题）
+                if loop_count % 5 == 0:
+                    self._log(f"战场状态: {last_state}, 友方数量: {len(allies) if allies else 0}, 敌方数量: {len(enemies) if enemies else 0}")
                 
                 # 根据战场状态处理
-                # 关键：有敌人时启动技能，无敌人时停止技能
-                if enemies:
-                    skill_ctrl.start_auto_skills()
-                else:
-                    skill_ctrl.stop_auto_skills()
-                
                 if state == BattlefieldState.NO_UNITS:
-                    # 无单位：随机移动搜索
-                    directions = [
-                        (['W'], 3), (['S'], 2), (['A'], 2), (['D'], 2),
-                        (['W', 'A'], 2), (['W', 'D'], 2), (['S', 'A'], 1), (['S', 'D'], 1),
-                    ]
-                    weights = [w for _, w in directions]
-                    keys = random.choices([d[0] for d in directions], weights=weights, k=1)[0]
-                    if verbose:
+                    # 无单位：检查技能监控线程是否最近检测到敌人
+                    if skill_ctrl.is_in_skill_range() and skill_ctrl.auto_skill_enabled:
+                        # 技能正在进行中，不随机移动，继续攻击
+                        self._log("战场无单位但技能仍在范围内，继续攻击")
+                        self.movement_ctrl.stop()
+                        skill_ctrl.start_auto_skills()
+                    elif hasattr(self, '_last_enemy_pos') and self._last_enemy_pos:
+                        # 有敌人最后位置，向该位置移动
+                        last_x, last_y, last_time = self._last_enemy_pos
+                        # 如果最后位置信息不超过5秒，向该位置移动
+                        if time.time() - last_time < 5.0:
+                            self._log(f"战场无单位，向敌人最后位置移动: ({last_x}, {last_y})")
+                            skill_ctrl.stop_auto_skills()
+                            self.movement_ctrl.move_towards(last_x, last_y,
+                                                           self_pos.center_x, self_pos.center_y)
+                        else:
+                            # 最后位置信息过期，随机移动
+                            self._last_enemy_pos = None
+                            skill_ctrl.stop_auto_skills()
+                            skill_ctrl.update_distance(9999)
+                            self.movement_ctrl.stop()
+                            directions = [
+                                (['W'], 3), (['S'], 2), (['A'], 2), (['D'], 2),
+                                (['W', 'A'], 2), (['W', 'D'], 2), (['S', 'A'], 1), (['S', 'D'], 1),
+                            ]
+                            weights = [w for _, w in directions]
+                            keys = random.choices([d[0] for d in directions], weights=weights, k=1)[0]
+                            self._log(f"随机移动: {'+'.join(keys)} 方向")
+                            self.movement_ctrl._press_movement_keys_for_duration(keys, 3.0)
+                    else:
+                        # 确实没有敌人信息，随机移动搜索
+                        skill_ctrl.stop_auto_skills()
+                        skill_ctrl.update_distance(9999)
+                        self.movement_ctrl.stop()
+                        directions = [
+                            (['W'], 3), (['S'], 2), (['A'], 2), (['D'], 2),
+                            (['W', 'A'], 2), (['W', 'D'], 2), (['S', 'A'], 1), (['S', 'D'], 1),
+                        ]
+                        weights = [w for _, w in directions]
+                        keys = random.choices([d[0] for d in directions], weights=weights, k=1)[0]
                         self._log(f"随机移动: {'+'.join(keys)} 方向")
-                    self.movement_ctrl._press_movement_keys_for_duration(keys, 3.0)
+                        self.movement_ctrl._press_movement_keys_for_duration(keys, 3.0)
                 
                 elif state == BattlefieldState.ALLIES_ONLY:
                     # 仅有友方：跟随友方
+                    skill_ctrl.stop_auto_skills()
                     if allies:
                         target = allies[0]
                         distance = self.distance_calc.calculate(self_pos, target)
@@ -622,45 +734,82 @@ class Phase1Handler:
                             self.movement_ctrl.stop()
                 
                 elif state == BattlefieldState.ENEMIES_ONLY or state == BattlefieldState.MIXED:
-                    # 有敌人：距离调整
-                    if enemies:
-                        nearest = min(enemies, key=lambda e: self.distance_calc.calculate(self_pos, e))
+                    # 有敌人：向最近的敌人移动并攻击
+                    targets = enemies if state == BattlefieldState.ENEMIES_ONLY else enemies
+                    if targets:
+                        # 获取最近的敌人
+                        nearest = min(targets, key=lambda e: self.distance_calc.calculate(self_pos, e))
                         distance = self.distance_calc.calculate(self_pos, nearest)
                         
-                        if skill_ctrl.is_in_skill_range():
-                            # 距离达标，停止移动
+                        # 【关键】保存敌人最后位置（用于 NO_UNITS 时的追踪）
+                        self._last_enemy_pos = (nearest.center_x, nearest.center_y, time.time())
+                        
+                        # 【关键修复】更新技能控制器的距离信息
+                        skill_ctrl.update_distance(distance)
+                        
+                        if distance <= 250:
+                            # 距离在技能范围内（0-250），启动自动技能
+                            skill_ctrl.start_auto_skills()
+                            skill_ctrl.update()
                             self.movement_ctrl.stop()
-                        elif distance > skill_ctrl.skill_range_max:
-                            # 靠近目标
-                            if verbose and loop_count % 10 == 0:
-                                self._log(f"距离过远({distance:.0f}px)，向目标移动")
+                        else:
+                            # 距离超出技能范围，靠近目标
+                            skill_ctrl.stop_auto_skills()
                             self.movement_ctrl.move_towards(nearest.center_x, nearest.center_y,
                                                            self_pos.center_x, self_pos.center_y)
-                        else:
-                            # 距离小于最小范围
-                            self.movement_ctrl.stop()
-                    else:
-                        self.movement_ctrl.stop()
                 
                 time.sleep(0.05)  # 主循环间隔
             
             # 清理资源
             self.detector.stop_phase1_end_detection()
             state_detector.stop_death_monitor()
-            skill_ctrl.shutdown()
+            skill_ctrl.stop_auto_skills()
             self.movement_ctrl.stop()
             self._log("自动战斗已停止")
             
+            # 根据检测结果转换状态
+            if phase1_end_detected:
+                self._log("第一阶段结束检测成功，进入下一阶段")
+                self.state_machine.transition_to(TutorialState.PHASE1_END)
+            else:
+                self._log_error("第一阶段结束检测超时，停止自动战斗")
+                self.state_machine.fail("第一阶段结束检测超时")
+        
         except Exception as e:
             self._log_error(f"自动战斗异常: {e}")
             import traceback
             self._log_error(traceback.format_exc())
+            self.detector.stop_phase1_end_detection()
+            self.state_machine.fail(f"自动战斗异常: {e}")
+    
+    def _handle_phase1_end_detection(self):
+        """处理第一阶段结束检测"""
+        timeout = self._cfg('第一阶段结束检测超时(秒)', 120.0)
         
-        # 判断是否成功检测到第一阶段结束
-        if self.detector.is_phase1_end_detected():
-            self.state_machine.transition_to(TutorialState.PHASE1_END)
-        else:
-            self.state_machine.fail("第一阶段结束检测失败")
+        self._log("开始第一阶段结束检测...")
+        
+        # 启动结束检测
+        self.detector.start_phase1_end_detection(timeout)
+        
+        # 等待检测完成
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            if self.detector.is_phase1_end_detected():
+                self._log("第一阶段结束检测成功")
+                self.detector.stop_phase1_end_detection()
+                self.state_machine.transition_to(TutorialState.PHASE1_END)
+                return
+            
+            if hasattr(self.task, '_should_exit') and self.task._should_exit():
+                self.detector.stop_phase1_end_detection()
+                self.state_machine.fail("用户取消")
+                return
+            
+            time.sleep(0.5)
+        
+        self._log_error("第一阶段结束检测超时")
+        self.detector.stop_phase1_end_detection()
+        self.state_machine.fail("第一阶段结束检测超时")
     
     # ==================== 辅助方法 ====================
     

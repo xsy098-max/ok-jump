@@ -54,6 +54,15 @@ class AutoTutorialTask(BaseJumpTask):
         # 配置类型定义（下拉框等）
         self.config_type = {
             '角色选择': {'type': 'drop_down', 'options': ['悟空', '路飞', '小鸣人', '全部']},
+            '选角界面检测超时(秒)': {'type': 'double_spin', 'min': 1.0, 'max': 300.0, 'decimals': 1},
+            '自身检测超时(秒)': {'type': 'double_spin', 'min': 1.0, 'max': 300.0, 'decimals': 1},
+            '目标检测超时(秒)': {'type': 'double_spin', 'min': 1.0, 'max': 300.0, 'decimals': 1},
+            '普攻检测超时(秒)': {'type': 'double_spin', 'min': 1.0, 'max': 300.0, 'decimals': 1},
+            '第一阶段结束检测超时(秒)': {'type': 'double_spin', 'min': 1.0, 'max': 600.0, 'decimals': 1},
+            '加载后等待时间(秒)': {'type': 'double_spin', 'min': 1.0, 'max': 300.0, 'decimals': 1},
+            '向下移动时间(秒)': {'type': 'double_spin', 'min': 0.1, 'max': 10.0, 'decimals': 1},
+            '移动持续时间(秒)': {'type': 'double_spin', 'min': 0.1, 'max': 10.0, 'decimals': 1},
+            '点击后等待时间(秒)': {'type': 'double_spin', 'min': 0.1, 'max': 10.0, 'decimals': 1},
         }
         
         # 配置描述

@@ -49,14 +49,17 @@ class TutorialDetector:
     def _log(self, message: str):
         """输出日志
         
-        注意：后台线程中使用 print 而非 logger，避免 I/O closed 错误
+        注意：后台线程中也使用 logger，确保日志显示在GUI中
         """
+        if hasattr(self.task, 'logger'):
+            self.task.logger.info(f"[检测器] {message}")
+        else:
+            print(f"[检测器] {message}")
+    
+    def _log_verbose(self, message: str):
+        """输出详细日志（仅在 verbose 模式下输出）"""
         if self._verbose:
-            # 检查是否在后台线程中
-            if threading.current_thread() is not threading.main_thread():
-                print(f"[检测器] {message}")
-            elif hasattr(self.task, 'logger'):
-                self.task.logger.info(f"[检测器] {message}")
+            self._log(message)
     
     # ==================== 选角界面检测 ====================
     
@@ -563,6 +566,38 @@ class TutorialDetector:
         self._log("普攻按钮检测超时")
         return False
     
+    def quick_detect_normal_attack_button(self) -> bool:
+        """
+        快速检测普攻按钮（单次检测，不循环）
+        
+        用于在移动过程中快速检查普攻按钮是否出现
+        
+        Returns:
+            bool: 是否检测到普攻按钮
+        """
+        try:
+            texts = self.task.ocr()
+            if not texts:
+                return False
+            
+            # 检测"普攻按钮"相关文字（简繁中文）
+            patterns = [
+                re.compile(r"普攻按钮|普攻按鈕"),
+                re.compile(r"普攻"),
+            ]
+            
+            # 根据游戏语言设置转换匹配模式
+            converted_patterns = [self.task._convert_match_for_lang(p) for p in patterns]
+            
+            for pattern in converted_patterns:
+                if self.task.find_boxes(texts, match=pattern):
+                    self._log("快速检测到普攻按钮")
+                    return True
+            
+            return False
+        except Exception as e:
+            return False
+    
     # ==================== 第一阶段结束检测 ====================
     
     def start_phase1_end_detection(self, timeout: float = 120.0):
@@ -612,45 +647,122 @@ class TutorialDetector:
     def _phase1_end_detection_loop(self, timeout: float):
         """
         第一阶段结束检测循环（在独立线程中运行）
+        
+        检测方式：
+        1. 模板匹配 end01.png（简体中文图片）
+        2. 模板匹配 end02.png（简体中文图片）
+        3. OCR 文字匹配（支持简繁中文）：
+           - "让我们来进行一场实战热身赛吧" / "讓我們來進行一場實戰熱身賽吧"
+           - "开始对战" / "開始對戰"
         """
         start_time = time.time()
+        check_count = 0
+        
+        # 定义结束检测的文字模式（简繁中文）
+        end_text_patterns = [
+            re.compile(r"让我们.*实战.*热身|讓我們.*實戰.*熱身"),
+            re.compile(r"开始对战|開始對戰"),
+        ]
+        
+        self._log(f"[结束检测] 线程开始运行，超时: {timeout}秒")
         
         while time.time() - start_time < timeout:
             with self._end_lock:
                 if not self._end_detection_running:
+                    self._log("[结束检测] 检测被停止")
                     return
             
             if hasattr(self.task, '_should_exit') and self.task._should_exit():
+                self._log("[结束检测] 检测到退出信号")
                 return
             
-            self.task.next_frame()
+            check_count += 1
             
-            # 检测 end01.png
+            # 每20次循环输出一次状态（约每2秒）
+            if check_count % 20 == 0:
+                elapsed = time.time() - start_time
+                self._log(f"[结束检测] 已运行 {elapsed:.1f}秒，检测次数: {check_count}")
+            
+            # 更新帧（独立线程需要自己的帧更新）
+            try:
+                self.task.next_frame()
+            except Exception as e:
+                if check_count % 20 == 0:
+                    self._log(f"[结束检测] next_frame异常: {e}")
+            
+            # 每10次循环输出一次OCR检测结果（约每1秒）
+            if check_count % 10 == 0:
+                try:
+                    texts = self.task.ocr()
+                    if texts:
+                        text_names = [t.name for t in texts[:10]]  # 只显示前10个
+                        self._log(f"[结束检测] OCR检测到文字: {text_names}")
+                except Exception as e:
+                    self._log(f"[结束检测] OCR检测异常: {e}")
+            
+            # 检测 end01.png（"让我们来进行一场实战热身赛吧"文字图片）
             try:
                 end01 = self.task.find_one(Features.TUTORIAL_END01, threshold=0.6)
                 if end01:
-                    self._log("检测到第一阶段结束标志(end01)")
+                    self._log(f"[结束检测] 检测到第一阶段结束标志(end01): ({end01.x}, {end01.y})")
+                    # 检测到 end01 也标记为结束
+                    with self._end_lock:
+                        self._end_detected = True
+                    return
             except ValueError:
                 end01 = None
+            except Exception as e:
+                if check_count % 20 == 0:
+                    self._log(f"[结束检测] end01检测异常: {e}")
             
-            # 检测 end02.png（开始对战按钮）
+            # 检测 end02.png（开始对战按钮图片）
             try:
                 end02 = self.task.find_one(Features.TUTORIAL_END02, threshold=0.6)
                 if end02:
-                    self._log(f"检测到开始对战按钮(end02): ({end02.x}, {end02.y})")
+                    self._log(f"[结束检测] 检测到开始对战按钮(end02): ({end02.x}, {end02.y})")
                     
                     # 点击开始对战按钮
                     self.task.click(end02, after_sleep=1)
                     
                     with self._end_lock:
                         self._end_detected = True
+                    self._log("[结束检测] 已点击开始对战按钮，检测结束")
                     return
             except ValueError:
                 pass
+            except Exception as e:
+                if check_count % 20 == 0:
+                    self._log(f"[结束检测] end02检测异常: {e}")
+            
+            # 【新增】OCR 文字匹配（支持简繁中文）
+            try:
+                texts = self.task.ocr()
+                if texts:
+                    for pattern in end_text_patterns:
+                        matched_texts = self.task.find_boxes(texts, match=pattern)
+                        if matched_texts:
+                            matched_name = matched_texts[0].name
+                            self._log(f"[结束检测] OCR匹配到结束文字: '{matched_name}'")
+                            
+                            # 如果是"开始对战"按钮，点击它
+                            if re.search(r"开始对战|開始對戰", matched_name):
+                                t = matched_texts[0]
+                                center_x = t.x + t.width // 2
+                                center_y = t.y + t.height // 2
+                                self._log(f"[结束检测] 点击开始对战按钮: ({center_x}, {center_y})")
+                                self.task.click(center_x, center_y, after_sleep=1)
+                            
+                            with self._end_lock:
+                                self._end_detected = True
+                            self._log("[结束检测] OCR检测结束，第一阶段完成")
+                            return
+            except Exception as e:
+                if check_count % 20 == 0:
+                    self._log(f"[结束检测] OCR匹配异常: {e}")
             
             time.sleep(0.1)
         
-        self._log("第一阶段结束检测超时")
+        self._log(f"[结束检测] 检测超时，共检测 {check_count} 次")
     
     # ==================== 辅助方法 ====================
     

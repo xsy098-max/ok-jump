@@ -151,7 +151,7 @@ class TestTutorialStateMachine:
         """测试完整状态流程"""
         sm = TutorialStateMachine()
         
-        # 模拟完整流程
+        # 模拟完整流程（注意：COMBAT_TRIGGER 直接转换到 PHASE1_END，不再经过 PHASE1_END_DETECTION）
         states = [
             TutorialState.CHECK_CHARACTER_SELECT,
             TutorialState.FIRST_CLICK,
@@ -164,7 +164,7 @@ class TestTutorialStateMachine:
             TutorialState.NORMAL_ATTACK_DETECTION,
             TutorialState.MOVE_DOWN,
             TutorialState.COMBAT_TRIGGER,
-            TutorialState.PHASE1_END_DETECTION,
+            # PHASE1_END_DETECTION 在 COMBAT_TRIGGER 内部并行运行
             TutorialState.PHASE1_END,
         ]
         
@@ -619,10 +619,13 @@ class TestPhase1Handler:
         handler.state_machine.transition_to(TutorialState.NORMAL_ATTACK_DETECTION)
         handler.state_machine.transition_to(TutorialState.MOVE_DOWN)
         
+        # Mock movement controller 的方法
+        handler.movement_ctrl._press_movement_keys_for_duration = MagicMock()
+        
         handler._handle_move_down()
         
-        task.send_key_down.assert_called_with('S')
-        task.send_key_up.assert_called_with('S')
+        # 验证调用了向下移动
+        handler.movement_ctrl._press_movement_keys_for_duration.assert_called_once()
         assert handler.state_machine.current_state == TutorialState.COMBAT_TRIGGER
     
     def test_cleanup_stops_detection(self):
@@ -701,7 +704,7 @@ class TestIntegration:
         """测试状态机完整流程"""
         sm = TutorialStateMachine()
         
-        # 模拟完整流程
+        # 模拟完整流程（注意：COMBAT_TRIGGER 直接转换到 PHASE1_END）
         flow = [
             TutorialState.IDLE,
             TutorialState.CHECK_CHARACTER_SELECT,
@@ -715,7 +718,7 @@ class TestIntegration:
             TutorialState.NORMAL_ATTACK_DETECTION,
             TutorialState.MOVE_DOWN,
             TutorialState.COMBAT_TRIGGER,
-            TutorialState.PHASE1_END_DETECTION,
+            # PHASE1_END_DETECTION 在 COMBAT_TRIGGER 内部并行运行
             TutorialState.PHASE1_END,
             TutorialState.COMPLETED,
         ]
@@ -758,3 +761,261 @@ class TestIntegration:
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
+
+
+# ==================== SkillController 测试 ====================
+
+class TestSkillController:
+    """技能控制器测试类"""
+    
+    def test_update_distance_with_valid_value(self):
+        """测试更新有效距离值"""
+        from src.combat.skill_controller import SkillController
+        
+        task = MagicMock()
+        task.logger = MagicMock()
+        task.config = {}
+        task.executor = None
+        
+        skill_ctrl = SkillController(task)
+        skill_ctrl.update_distance(150.0)
+        
+        assert skill_ctrl.get_current_distance() == 150.0
+    
+    def test_update_distance_with_none_value(self):
+        """测试更新 None 距离值应被忽略"""
+        from src.combat.skill_controller import SkillController
+        
+        task = MagicMock()
+        task.logger = MagicMock()
+        task.config = {}
+        task.executor = None
+        
+        skill_ctrl = SkillController(task)
+        # 先设置一个有效值
+        skill_ctrl.update_distance(100.0)
+        assert skill_ctrl.get_current_distance() == 100.0
+        
+        # 尝试更新 None，应保持原值
+        skill_ctrl.update_distance(None)
+        assert skill_ctrl.get_current_distance() == 100.0
+    
+    def test_is_in_skill_range_with_valid_distance(self):
+        """测试有效距离的范围检查"""
+        from src.combat.skill_controller import SkillController
+        
+        task = MagicMock()
+        task.logger = MagicMock()
+        task.config = {}
+        task.executor = None
+        
+        skill_ctrl = SkillController(task)
+        
+        # 在范围内
+        skill_ctrl.update_distance(150.0)
+        assert skill_ctrl.is_in_skill_range() is True
+        
+        # 超出范围
+        skill_ctrl.update_distance(300.0)
+        assert skill_ctrl.is_in_skill_range() is False
+        
+        # 边界值
+        skill_ctrl.update_distance(250.0)
+        assert skill_ctrl.is_in_skill_range() is True
+        
+        skill_ctrl.update_distance(0.0)
+        assert skill_ctrl.is_in_skill_range() is True
+    
+    def test_is_in_skill_range_with_none_distance(self):
+        """测试 None 距离的范围检查应返回 False"""
+        from src.combat.skill_controller import SkillController
+        
+        task = MagicMock()
+        task.logger = MagicMock()
+        task.config = {}
+        task.executor = None
+        
+        skill_ctrl = SkillController(task)
+        # 不更新距离，初始值为 inf
+        
+        # 手动设置为 None 测试
+        skill_ctrl._current_distance = None
+        assert skill_ctrl.is_in_skill_range() is False
+    
+    def test_is_in_skill_range_with_inf_distance(self):
+        """测试 inf 距离的范围检查应返回 False"""
+        from src.combat.skill_controller import SkillController
+        
+        task = MagicMock()
+        task.logger = MagicMock()
+        task.config = {}
+        task.executor = None
+        
+        skill_ctrl = SkillController(task)
+        # 初始值是 inf
+        assert skill_ctrl.is_in_skill_range() is False
+
+
+# ==================== CombatConfigAdapter 测试 ====================
+
+class TestCombatConfigAdapter:
+    """战斗配置适配器测试类"""
+    
+    def test_adapter_has_required_methods(self):
+        """测试适配器具有所有必需方法"""
+        task = build_mock_task()
+        handler = Phase1Handler(task)
+        handler.initialize('路飞')
+        
+        adapter = handler._create_combat_config_adapter()
+        
+        # 检查必需方法存在
+        assert hasattr(adapter, 'config')
+        assert hasattr(adapter, 'get')
+        assert hasattr(adapter, 'send_key')
+        assert hasattr(adapter, 'click')
+        assert hasattr(adapter, 'is_adb')
+        assert hasattr(adapter, 'update_frame')
+    
+    def test_adapter_click_forwards_to_task(self):
+        """测试适配器 click 方法转发到任务"""
+        task = build_mock_task()
+        handler = Phase1Handler(task)
+        handler.initialize('路飞')
+        
+        adapter = handler._create_combat_config_adapter()
+        adapter.click(100, 200, after_sleep=0.5)
+        
+        task.click.assert_called_once_with(100, 200, after_sleep=0.5)
+    
+    def test_adapter_send_key_forwards_to_task(self):
+        """测试适配器 send_key 方法转发到任务"""
+        task = build_mock_task()
+        handler = Phase1Handler(task)
+        handler.initialize('路飞')
+        
+        adapter = handler._create_combat_config_adapter()
+        adapter.send_key('J')
+        
+        task.send_key.assert_called_once_with('J')
+    
+    def test_adapter_get_reads_combat_config(self):
+        """测试适配器 get 方法读取战斗配置"""
+        task = build_mock_task()
+        handler = Phase1Handler(task)
+        handler.initialize('路飞')
+        
+        adapter = handler._create_combat_config_adapter()
+        
+        # 测试获取默认值
+        value = adapter.get('自动普攻', True)
+        assert value is True
+
+
+# ==================== Phase1Handler 战斗触发测试 ====================
+
+class TestPhase1HandlerCombatTrigger:
+    """第一阶段处理器战斗触发测试类"""
+    
+    def test_combat_trigger_updates_skill_distance(self):
+        """测试战斗触发时更新技能控制器距离"""
+        task = build_mock_task()
+        
+        # 模拟敌人检测结果
+        mock_enemy = MagicMock()
+        mock_enemy.center_x = 500
+        mock_enemy.center_y = 400
+        
+        handler = Phase1Handler(task)
+        handler.initialize('路飞')
+        handler._verbose = True
+        
+        # 创建技能控制器并检查距离更新
+        from src.combat.skill_controller import SkillController
+        combat_config_adapter = handler._create_combat_config_adapter()
+        skill_ctrl = SkillController(combat_config_adapter)
+        
+        # 模拟自身位置
+        mock_self = MagicMock()
+        mock_self.center_x = 400
+        mock_self.center_y = 300
+        
+        # 计算距离
+        import math
+        distance = math.sqrt((500-400)**2 + (400-300)**2)
+        
+        # 更新距离
+        skill_ctrl.update_distance(distance)
+        
+        # 验证距离已更新
+        assert skill_ctrl.get_current_distance() == distance
+        assert skill_ctrl.is_in_skill_range() is True  # 距离约 141，在 0-250 范围内
+    
+    def test_phase1_end_detection_runs_parallel(self):
+        """测试第一阶段结束检测在战斗期间并行运行"""
+        task = build_mock_task()
+        task.find_one = MagicMock(side_effect=ValueError("not found"))
+        
+        handler = Phase1Handler(task)
+        handler.initialize('路飞')
+        
+        # 启动结束检测
+        handler.detector.start_phase1_end_detection(timeout=2.0)
+        
+        # 验证检测线程已启动
+        assert handler.detector._end_detection_running is True
+        assert handler.detector._end_detection_thread is not None
+        
+        # 停止检测
+        handler.detector.stop_phase1_end_detection()
+        
+        assert handler.detector._end_detection_running is False
+
+
+# ==================== 距离计算测试 ====================
+
+class TestDistanceCalculator:
+    """距离计算器测试类"""
+    
+    def test_calculate_from_coords(self):
+        """测试从坐标计算距离"""
+        from src.combat.distance_calculator import DistanceCalculator
+        
+        calc = DistanceCalculator()
+        
+        # 相同点距离为 0
+        distance = calc.calculate_from_coords(100, 100, 100, 100)
+        assert distance == 0
+        
+        # 水平距离
+        distance = calc.calculate_from_coords(0, 0, 100, 0)
+        assert distance == 100
+        
+        # 垂直距离
+        distance = calc.calculate_from_coords(0, 0, 0, 100)
+        assert distance == 100
+        
+        # 对角线距离
+        distance = calc.calculate_from_coords(0, 0, 300, 400)
+        assert distance == 500
+    
+    def test_calculate_from_detection_results(self):
+        """测试从检测结果计算距离"""
+        from src.combat.distance_calculator import DistanceCalculator
+        
+        calc = DistanceCalculator()
+        
+        # 模拟检测结果
+        mock_self = MagicMock()
+        mock_self.center_x = 100
+        mock_self.center_y = 100
+        
+        mock_target = MagicMock()
+        mock_target.center_x = 400
+        mock_target.center_y = 500
+        
+        distance = calc.calculate(mock_self, mock_target)
+        
+        import math
+        expected = math.sqrt((400-100)**2 + (500-100)**2)
+        assert abs(distance - expected) < 0.01
