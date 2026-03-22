@@ -192,11 +192,20 @@ class SkillController:
 
             if success:
                 mode = "ADB" if self.is_adb() else "Windows"
-                self.task.logger.info(f"[技能] 释放{skill_name}: {key} ({mode})")
+                try:
+                    self.task.logger.info(f"[技能] 释放{skill_name}: {key} ({mode})")
+                except Exception:
+                    pass
             else:
-                self.task.logger.error(f"[技能] 释放{skill_name}失败")
+                try:
+                    self.task.logger.error(f"[技能] 释放{skill_name}失败")
+                except Exception:
+                    pass
         except Exception as e:
-            self.task.logger.error(f"[技能] 释放{skill_name}失败: {e}")
+            try:
+                self.task.logger.error(f"[技能] 释放{skill_name}失败: {e}")
+            except Exception:
+                pass
     
     def start_auto_skills(self):
         """启动自动技能（启动独立监控线程）"""
@@ -253,7 +262,10 @@ class SkillController:
         持续监控距离，在范围内时独立释放各技能
         每个技能独立冷却，互不影响
         """
-        self.task.logger.info("[技能] 技能监控循环开始")
+        try:
+            self.task.logger.info("[技能] 技能监控循环开始")
+        except Exception:
+            pass
         log_counter = 0  # 用于定期输出状态
         
         while self._skill_thread_running:
@@ -270,9 +282,13 @@ class SkillController:
                 log_counter += 1
                 if log_counter >= 50:
                     log_counter = 0
-                    self.task.logger.info(f"[技能] 状态检查 - 距离: {distance:.0f}px, "
-                                         f"范围内: {self.is_in_skill_range()}, "
-                                         f"普攻启用: {self._is_skill_enabled('自动普攻')}")
+                    try:
+                        self.task.logger.info(f"[技能] 状态检查 - 距离: {distance:.0f}px, "
+                                             f"范围内: {self.is_in_skill_range()}, "
+                                             f"普攻启用: {self._is_skill_enabled('自动普攻')}")
+                    except Exception:
+                        # 日志输出失败时忽略，避免影响技能释放
+                        pass
                 
                 # 检查是否在技能释放范围内
                 if not self.is_in_skill_range():
@@ -286,10 +302,16 @@ class SkillController:
                 time.sleep(0.02)
                 
             except Exception as e:
-                self.task.logger.error(f"[技能] 监控循环异常: {e}")
+                try:
+                    self.task.logger.error(f"[技能] 监控循环异常: {e}")
+                except Exception:
+                    pass
                 time.sleep(0.1)
         
-        self.task.logger.info("[技能] 技能监控循环结束")
+        try:
+            self.task.logger.info("[技能] 技能监控循环结束")
+        except Exception:
+            pass
     
     def _try_release_skills(self):
         """
@@ -347,6 +369,11 @@ class SkillController:
         """
         从任务配置读取设置（技能开关和间隔）
         
+        优先级：
+        1. 任务自身的 config 属性
+        2. 全局配置中的 AutoCombatTask 配置
+        3. 默认值
+        
         Args:
             key: 配置键名
             default: 默认值
@@ -354,8 +381,21 @@ class SkillController:
         Returns:
             配置值
         """
+        # 优先从任务自身的 config 读取
         if hasattr(self.task, 'config') and self.task.config:
-            return self.task.config.get(key, default)
+            value = self.task.config.get(key, None)
+            if value is not None:
+                return value
+        
+        # 回退：从全局配置读取 AutoCombatTask 的配置
+        try:
+            if og and og.config:
+                combat_config = og.config.get('AutoCombatTask', {})
+                if combat_config and key in combat_config:
+                    return combat_config[key]
+        except Exception:
+            pass
+        
         return default
     
     def _get_hotkey_config(self, skill_name, default=None):

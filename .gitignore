@@ -11,10 +11,19 @@ build/
 # IDE
 .idea/
 .vscode/
+.trae/
 
 # OS
 Thumbs.db
 .DS_Store
+nul
 
 # Env
 .env
+
+# Logs
+logs/
+
+# Build artifacts
+*.spec
+=*

@@ -15,7 +15,10 @@ class TutorialState(Enum):
     IDLE → CHECK_CHARACTER_SELECT → FIRST_CLICK → CONFIRM_DIALOG → SECOND_CLICK 
     → LOADING → SELF_DETECTION → TARGET_DETECTION → MOVE_TO_TARGET 
     → NORMAL_ATTACK_DETECTION → MOVE_DOWN → COMBAT_TRIGGER 
-    → PHASE1_END_DETECTION → PHASE1_END → [预留] → COMPLETED
+    → PHASE1_END → [预留] → COMPLETED
+    
+    注意：COMBAT_TRIGGER 阶段同时运行自动战斗和第一阶段结束检测，
+    检测到 end01.png 和 end02.png 后直接进入 PHASE1_END。
     """
     
     # 初始状态
@@ -71,8 +74,7 @@ class TutorialStateMachine:
         TutorialState.MOVE_TO_TARGET: [TutorialState.NORMAL_ATTACK_DETECTION, TutorialState.FAILED],
         TutorialState.NORMAL_ATTACK_DETECTION: [TutorialState.MOVE_DOWN, TutorialState.FAILED],
         TutorialState.MOVE_DOWN: [TutorialState.COMBAT_TRIGGER, TutorialState.FAILED],
-        TutorialState.COMBAT_TRIGGER: [TutorialState.PHASE1_END_DETECTION, TutorialState.FAILED],
-        TutorialState.PHASE1_END_DETECTION: [TutorialState.PHASE1_END, TutorialState.FAILED],
+        TutorialState.COMBAT_TRIGGER: [TutorialState.PHASE1_END, TutorialState.FAILED],
         TutorialState.PHASE1_END: [TutorialState.PHASE2_3V3, TutorialState.COMPLETED],
         TutorialState.PHASE2_3V3: [TutorialState.PHASE3_FINISH, TutorialState.FAILED],
         TutorialState.PHASE3_FINISH: [TutorialState.COMPLETED, TutorialState.FAILED],

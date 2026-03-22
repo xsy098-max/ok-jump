@@ -143,9 +143,6 @@ class Phase1Handler:
                 elif current_state == TutorialState.COMBAT_TRIGGER:
                     self._handle_combat_trigger()
                 
-                elif current_state == TutorialState.PHASE1_END_DETECTION:
-                    self._handle_phase1_end_detection()
-                
                 else:
                     # 未知状态，跳过
                     time.sleep(0.1)
@@ -450,9 +447,7 @@ class Phase1Handler:
     
     def _get_combat_config(self, key: str, default=None):
         """
-        从 AutoCombatTask 配置中读取战斗参数
-        
-        确保新手教程中的自动战斗使用用户在GUI中配置的参数
+        从 AutoCombatTask 配置中读取战斗参数（用于其他场景的回退）
         
         Args:
             key: 配置键名
@@ -488,90 +483,55 @@ class Phase1Handler:
         
         return default
     
-    def _create_combat_config_adapter(self):
-        """
-        创建配置适配器，使 SkillController 能读取 AutoCombatTask 的配置
-        
-        SkillController 期望 task 对象具有 config 属性，
-        此适配器将 config.get() 调用重定向到 _get_combat_config
-        
-        Returns:
-            配置适配器对象
-        """
-        handler = self
-        
-        class CombatConfigAdapter:
-            """战斗配置适配器"""
-            
-            def __init__(self, handler):
-                self._handler = handler
-                # 复制必要的属性给 SkillController 使用
-                self.logger = handler.task.logger
-                self.frame = None  # 将在运行时更新
-                self.executor = handler.task.executor if hasattr(handler.task, 'executor') else None
-            
-            @property
-            def config(self):
-                """返回配置字典，支持 .get() 方法"""
-                return self
-            
-            def get(self, key, default=None):
-                """从 AutoCombatTask 配置读取"""
-                return handler._get_combat_config(key, default)
-            
-            def send_key(self, key):
-                """转发按键操作"""
-                return handler.task.send_key(key)
-            
-            def is_adb(self):
-                """检查是否为 ADB 模式"""
-                return handler.task.is_adb() if hasattr(handler.task, 'is_adb') else False
-            
-            def update_frame(self):
-                """更新帧引用"""
-                self.frame = handler.task.frame
-        
-        return CombatConfigAdapter(self)
-    
     def _handle_combat_trigger(self):
-        """处理自动战斗触发"""
+        """处理自动战斗触发 - 自动战斗与第一阶段结束检测并行运行
+        
+        流程：
+        1. 启动自动战斗（持续运行）
+        2. 同时启动第一阶段结束检测线程（2分钟超时）
+        3. 检测到 end01.png（"让我们来进行一场实战热身赛"）和 end02.png（"开始对战"按钮）
+        4. 自动点击"开始对战"按钮
+        5. 停止自动战斗，进入第一阶段结束状态
+        """
         self._log("新手教程第一阶段完成，启动自动战斗...")
         
-        # 直接在新手教程任务中运行自动战斗逻辑
         try:
             from src.combat.state_detector import StateDetector
             from src.combat.skill_controller import SkillController
             from src.combat import BattlefieldState
             import random
             
+            # 获取详细日志配置
+            verbose = self._get_combat_config('详细日志', self._verbose)
+            
+            # 输出当前战斗配置
+            self._log("自动战斗配置（从AutoCombatTask继承）:")
+            self._log(f"  自动普攻: {self._get_combat_config('自动普攻', True)}")
+            self._log(f"  自动技能1: {self._get_combat_config('自动技能1', True)}")
+            self._log(f"  自动技能2: {self._get_combat_config('自动技能2', True)}")
+            self._log(f"  自动大招: {self._get_combat_config('自动大招', True)}")
+            self._log(f"  详细日志: {verbose}")
+            
             # 初始化战斗控制器
             state_detector = StateDetector(self.task)
-            state_detector.set_verbose(self._verbose)
+            state_detector.set_verbose(verbose)
             
-            # 创建配置适配器，使 SkillController 能读取 AutoCombatTask 的配置
-            combat_config_adapter = self._create_combat_config_adapter()
-            skill_ctrl = SkillController(combat_config_adapter)
-            
-            # 输出当前战斗配置（详细日志模式）
-            if self._verbose:
-                self._log("自动战斗配置（从AutoCombatTask继承）:")
-                self._log(f"  自动普攻: {self._get_combat_config('自动普攻', True)}")
-                self._log(f"  自动技能1: {self._get_combat_config('自动技能1', True)}")
-                self._log(f"  自动技能2: {self._get_combat_config('自动技能2', True)}")
-                self._log(f"  自动大招: {self._get_combat_config('自动大招', True)}")
-                self._log(f"  普攻间隔: {self._get_combat_config('普攻间隔(秒)', 0.5)}秒")
-                self._log(f"  技能1间隔: {self._get_combat_config('技能1间隔(秒)', 2.0)}秒")
-                self._log(f"  技能2间隔: {self._get_combat_config('技能2间隔(秒)', 3.0)}秒")
-                self._log(f"  大招间隔: {self._get_combat_config('大招间隔(秒)', 5.0)}秒")
+            # 创建技能控制器
+            skill_ctrl = SkillController(self.task)
             
             # 启动死亡状态并行监控
             state_detector.start_death_monitor()
             self._log("死亡状态监控线程已启动")
             
-            # 自动战斗主循环
+            # 启动第一阶段结束检测（独立线程，2分钟超时）
+            end_detection_timeout = self._cfg('第一阶段结束检测超时(秒)', 120.0)
+            self.detector.start_phase1_end_detection(end_detection_timeout)
+            self._log(f"第一阶段结束检测线程已启动（超时: {end_detection_timeout}秒）")
+            
+            # 自动战斗主循环（持续运行直到检测到第一阶段结束）
             loop_count = 0
             last_state = None
-            verbose = self._verbose
+            start_combat_time = time.time()
             
             while True:
                 loop_count += 1
@@ -581,12 +541,21 @@ class Phase1Handler:
                     self._log("检测到退出信号，停止自动战斗")
                     break
                 
+                # 检查第一阶段是否结束（由独立线程检测）
+                if self.detector.is_phase1_end_detected():
+                    self._log("检测到第一阶段结束标志，停止自动战斗")
+                    break
+                
+                # 检查结束检测是否超时
+                if time.time() - start_combat_time > end_detection_timeout:
+                    self._log_error("第一阶段结束检测超时，停止自动战斗")
+                    break
+                
                 # 后台模式：检查并自动伪最小化
                 background_manager.check_and_auto_pseudo_minimize()
                 
                 # 更新帧
                 self.task.next_frame()
-                combat_config_adapter.update_frame()  # 同步帧到适配器
                 
                 # 死亡状态检测
                 if state_detector.is_death_detected():
@@ -596,35 +565,50 @@ class Phase1Handler:
                     time.sleep(1)
                     continue
                 
-                # 自身位置检测
-                self_pos = state_detector.detect_self(timeout=15)
+                # 自身位置检测（缩短超时，避免阻塞太久）
+                self_pos = state_detector.detect_self(timeout=5)
                 if self_pos is None:
-                    self._log_error("15秒未检测到自身位置，停止自动战斗")
-                    break
+                    if verbose and loop_count % 20 == 0:
+                        self._log("未检测到自身位置，继续尝试...")
+                    time.sleep(0.1)
+                    continue
                 
                 # 战场状态判断
                 state, allies, enemies = state_detector.get_battlefield_state_detailed()
                 last_state = state.value
                 
                 if verbose and loop_count % 10 == 0:
-                    self._log(f"循环: {loop_count}, 状态: {last_state}")
+                    self._log(f"循环: {loop_count}, 状态: {last_state}, 友方: {len(allies)}, 敌军: {len(enemies)}")
+                
+                # 更新距离给技能控制器
+                if enemies:
+                    nearest_enemy = min(enemies, key=lambda e: self.distance_calc.calculate(self_pos, e))
+                    distance = self.distance_calc.calculate(self_pos, nearest_enemy)
+                    skill_ctrl.update_distance(distance)
+                    if verbose and loop_count % 10 == 0:
+                        self._log(f"更新距离: {distance:.0f}px, 技能范围内: {skill_ctrl.is_in_skill_range()}")
                 
                 # 根据战场状态处理
+                # 关键：有敌人时启动技能，无敌人时停止技能
+                if enemies:
+                    skill_ctrl.start_auto_skills()
+                else:
+                    skill_ctrl.stop_auto_skills()
+                
                 if state == BattlefieldState.NO_UNITS:
                     # 无单位：随机移动搜索
-                    skill_ctrl.stop_auto_skills()
                     directions = [
                         (['W'], 3), (['S'], 2), (['A'], 2), (['D'], 2),
                         (['W', 'A'], 2), (['W', 'D'], 2), (['S', 'A'], 1), (['S', 'D'], 1),
                     ]
                     weights = [w for _, w in directions]
                     keys = random.choices([d[0] for d in directions], weights=weights, k=1)[0]
-                    self._log(f"随机移动: {'+'.join(keys)} 方向")
+                    if verbose:
+                        self._log(f"随机移动: {'+'.join(keys)} 方向")
                     self.movement_ctrl._press_movement_keys_for_duration(keys, 3.0)
                 
                 elif state == BattlefieldState.ALLIES_ONLY:
                     # 仅有友方：跟随友方
-                    skill_ctrl.stop_auto_skills()
                     if allies:
                         target = allies[0]
                         distance = self.distance_calc.calculate(self_pos, target)
@@ -638,72 +622,45 @@ class Phase1Handler:
                             self.movement_ctrl.stop()
                 
                 elif state == BattlefieldState.ENEMIES_ONLY or state == BattlefieldState.MIXED:
-                    # 有敌人：向最近的敌人移动并攻击
-                    targets = enemies if state == BattlefieldState.ENEMIES_ONLY else enemies
-                    if targets:
-                        # 获取最近的敌人
-                        nearest = min(targets, key=lambda e: self.distance_calc.calculate(self_pos, e))
+                    # 有敌人：距离调整
+                    if enemies:
+                        nearest = min(enemies, key=lambda e: self.distance_calc.calculate(self_pos, e))
                         distance = self.distance_calc.calculate(self_pos, nearest)
                         
-                        if 100 <= distance <= 200:
-                            # 距离达标，启动自动技能
-                            skill_ctrl.start_auto_skills()
-                            skill_ctrl.update()
+                        if skill_ctrl.is_in_skill_range():
+                            # 距离达标，停止移动
                             self.movement_ctrl.stop()
-                        elif distance > 200:
+                        elif distance > skill_ctrl.skill_range_max:
                             # 靠近目标
-                            skill_ctrl.stop_auto_skills()
+                            if verbose and loop_count % 10 == 0:
+                                self._log(f"距离过远({distance:.0f}px)，向目标移动")
                             self.movement_ctrl.move_towards(nearest.center_x, nearest.center_y,
                                                            self_pos.center_x, self_pos.center_y)
                         else:
-                            # 远离目标
-                            skill_ctrl.stop_auto_skills()
-                            self.movement_ctrl.move_away(nearest.center_x, nearest.center_y,
-                                                        self_pos.center_x, self_pos.center_y)
+                            # 距离小于最小范围
+                            self.movement_ctrl.stop()
+                    else:
+                        self.movement_ctrl.stop()
                 
                 time.sleep(0.05)  # 主循环间隔
             
             # 清理资源
+            self.detector.stop_phase1_end_detection()
             state_detector.stop_death_monitor()
-            skill_ctrl.stop_auto_skills()
+            skill_ctrl.shutdown()
             self.movement_ctrl.stop()
             self._log("自动战斗已停止")
-        
+            
         except Exception as e:
             self._log_error(f"自动战斗异常: {e}")
             import traceback
             self._log_error(traceback.format_exc())
         
-        self.state_machine.transition_to(TutorialState.PHASE1_END_DETECTION)
-    
-    def _handle_phase1_end_detection(self):
-        """处理第一阶段结束检测"""
-        timeout = self._cfg('第一阶段结束检测超时(秒)', 120.0)
-        
-        self._log("开始第一阶段结束检测...")
-        
-        # 启动结束检测
-        self.detector.start_phase1_end_detection(timeout)
-        
-        # 等待检测完成
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            if self.detector.is_phase1_end_detected():
-                self._log("第一阶段结束检测成功")
-                self.detector.stop_phase1_end_detection()
-                self.state_machine.transition_to(TutorialState.PHASE1_END)
-                return
-            
-            if hasattr(self.task, '_should_exit') and self.task._should_exit():
-                self.detector.stop_phase1_end_detection()
-                self.state_machine.fail("用户取消")
-                return
-            
-            time.sleep(0.5)
-        
-        self._log_error("第一阶段结束检测超时")
-        self.detector.stop_phase1_end_detection()
-        self.state_machine.fail("第一阶段结束检测超时")
+        # 判断是否成功检测到第一阶段结束
+        if self.detector.is_phase1_end_detected():
+            self.state_machine.transition_to(TutorialState.PHASE1_END)
+        else:
+            self.state_machine.fail("第一阶段结束检测失败")
     
     # ==================== 辅助方法 ====================
     

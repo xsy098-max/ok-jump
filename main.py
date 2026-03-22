@@ -99,6 +99,51 @@ def patch_start_controller():
     logger.info('StartController patched: skip_pos_check support enabled')
 
 
+def patch_adb_connect_error_handling():
+    """
+    Patch DeviceManager.adb_connect to reduce log level for expected connection failures.
+    When no device is connected, ADB timeout is expected behavior, not an error.
+    """
+    from ok.device.DeviceManager import DeviceManager
+    from adbutils import AdbError, AdbTimeout
+    logger = Logger.get_logger(__name__)
+
+    original_adb_connect = DeviceManager.adb_connect
+
+    def patched_adb_connect(self, addr, try_connect=True):
+        from adbutils import AdbError, AdbTimeout
+        try:
+            for device in self.adb.list():
+                if self.exit_event.is_set():
+                    logger.debug(f"adb_connect exit_event is set")
+                    return None
+                if device.serial == addr:
+                    if device.state == 'offline':
+                        logger.info(f'adb_connect offline disconnect first {addr}')
+                        self.adb.disconnect(addr)
+                    else:
+                        logger.info(f'adb_connect already connected {addr}')
+                        return self.adb.device(serial=addr)
+            if try_connect:
+                ret = self.adb.connect(addr, timeout=5)
+                logger.info(f'adb_connect try_connect {addr} {ret}')
+                return original_adb_connect(self, addr, try_connect=False)
+            else:
+                logger.debug(f'adb_connect {addr} not in device list')
+        except AdbTimeout:
+            # Timeout is expected when no device is connected - use DEBUG level
+            logger.debug(f"adb connect timeout (no device at {addr})")
+        except AdbError as e:
+            # Other ADB errors - use WARNING level for expected failures
+            logger.warning(f"adb connect error {addr}: {e}")
+        except Exception as e:
+            # Unexpected errors - keep as ERROR
+            logger.error(f"adb connect unexpected error {addr}", e)
+
+    DeviceManager.adb_connect = patched_adb_connect
+    logger.info('DeviceManager.adb_connect patched: timeout errors suppressed')
+
+
 def patch_task_buttons_alignment():
     """
     Patch TaskButtons to fix button alignment issue
@@ -106,15 +151,15 @@ def patch_task_buttons_alignment():
     """
     from ok.gui.tasks.TaskCard import TaskButtons
     logger = Logger.get_logger(__name__)
-    
+
     original_init_ui = TaskButtons.init_ui
-    
+
     def patched_init_ui(self):
         original_init_ui(self)
         # Set minimum width to ensure buttons are aligned across all task cards
         # This accounts for the maximum button combination (Start + Stop + Pause)
         self.setMinimumWidth(280)
-    
+
     TaskButtons.init_ui = patched_init_ui
     logger.info('TaskButtons patched: button alignment fixed')
 
@@ -167,12 +212,13 @@ StartCard.export_logs = staticmethod(export_logs)
 if __name__ == '__main__':
     # Register cleanup function to run on exit
     atexit.register(cleanup_logger)
-    
+
     # Smart device selection (MUST be before OK(config)!)
     smart_device_selection()
     # Apply patches before starting
     patch_logger_handler()
     patch_start_controller()
+    patch_adb_connect_error_handling()
     patch_task_buttons_alignment()
     # Initialize OK framework (will read devices.json)
     ok = OK(config)
