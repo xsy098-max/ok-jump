@@ -440,11 +440,9 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
         if isinstance(match, re.Pattern):
             # 创建双语模式
             bilingual = LangConverter.create_bilingual_regex(match)
-            self.log_info(f"正则转换: '{match.pattern}' -> '{bilingual.pattern}'")
             return bilingual
         elif isinstance(match, str):
             converted = LangConverter.create_bilingual_pattern(match)
-            self.log_info(f"字符串转换: '{match}' -> '{converted}'")
             return converted
         elif isinstance(match, list):
             return [self._convert_match_for_lang(m) for m in match]
@@ -463,8 +461,6 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
             config = self.get_global_config(basic_config_option)
             lang = config.get('游戏文本语言', '简体中文')
             is_traditional = lang == '繁体中文'
-            # 添加调试日志
-            self.log_info(f"游戏文本语言配置: '{lang}', 是否繁体: {is_traditional}")
             return is_traditional
         except Exception as e:
             self.log_error(f"获取游戏文本语言配置失败: {e}")

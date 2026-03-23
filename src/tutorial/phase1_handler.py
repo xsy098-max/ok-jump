@@ -40,6 +40,19 @@ class Phase1Handler:
         self.distance_calc: Optional[DistanceCalculator] = None
         self._verbose = False
         self._last_enemy_pos = None  # 敌人最后位置 (x, y, timestamp)
+        
+        # 【抖动检测】坐标历史记录，用于检测 A→B→A→B 模式
+        self._position_history = []  # 存储最近的位置 (x, y)
+        self._position_history_max = 6  # 最多记录6个位置
+        
+        # 抖动检测调试统计
+        self._jitter_check_count = 0  # 抖动检测次数统计
+        self._last_recorded_pos = None  # 上次记录的位置（用于调试）
+        self._skipped_record_count = 0  # 因阈值跳过记录的次数
+        
+        # 【新增】移动方向历史记录（用于检测方向抖动）
+        self._move_direction_history = []  # 存储最近的移动方向 (dx, dy)
+        self._move_direction_max = 6  # 最多记录6个方向
     
     def set_verbose(self, verbose: bool):
         """设置详细日志"""
@@ -357,8 +370,8 @@ class Phase1Handler:
             self.state_machine.fail("目标位置丢失")
             return
         
-        # 移动总体超时机制（30秒）
-        MOVE_TOTAL_TIMEOUT = 30.0
+        # 移动总体超时机制（50秒）
+        MOVE_TOTAL_TIMEOUT = 50.0
         if not hasattr(self, '_move_start_time'):
             self._move_start_time = time.time()
         
@@ -378,26 +391,34 @@ class Phase1Handler:
         
         if target_type == 'monkey':
             # 【悟空专用】猴子会移动，可能走出屏幕
-            # 使用较短超时快速检测，检测不到时使用最后位置继续移动
-            new_target = self.detector.detect_monkey(timeout=1.0)
+            # 使用更短超时(0.5秒)快速检测，检测不到时使用最后位置继续移动
+            new_target = self.detector.detect_monkey(timeout=0.5)
             
             if new_target:
                 # 检测到猴子，更新位置并保存最后位置
                 self._target = new_target
                 self._last_monkey_pos = (new_target.center_x, new_target.center_y)
-                self._log(f"猴子位置更新: ({new_target.center_x}, {new_target.center_y})")
+                # 减少日志输出频率，每3次更新输出一次
+                if not hasattr(self, '_monkey_update_count'):
+                    self._monkey_update_count = 0
+                self._monkey_update_count += 1
+                if self._monkey_update_count % 3 == 1:
+                    self._log(f"猴子位置更新: ({new_target.center_x}, {new_target.center_y})")
             elif hasattr(self, '_last_monkey_pos') and self._last_monkey_pos:
-                # 未检测到猴子，使用最后位置继续移动
-                self._log(f"猴子未检测到，向最后位置移动: {self._last_monkey_pos}")
+                # 未检测到猴子，使用最后位置继续移动（不输出日志以减少噪音）
+                pass
             else:
                 # 没有最后位置，跳过本次循环继续尝试
                 self._log("猴子未检测到且无最后位置，继续尝试...")
-                time.sleep(0.1)
+                time.sleep(0.05)
                 return
             
-            # 【悟空专用】在移动期间检测普攻按钮
-            # 如果检测到普攻按钮，说明已进入战斗区域，立即进入下一阶段
-            if self.detector.quick_detect_normal_attack_button():
+            # 【悟空专用】在移动期间检测普攻按钮（每3次循环检测一次，减少开销）
+            if not hasattr(self, '_combat_check_count'):
+                self._combat_check_count = 0
+            self._combat_check_count += 1
+            
+            if self._combat_check_count % 3 == 1 and self.detector.quick_detect_normal_attack_button():
                 self._log("移动期间检测到普攻按钮，进入普攻按钮检测阶段")
                 self.movement_ctrl.stop()
                 self._move_start_time = None
@@ -418,16 +439,20 @@ class Phase1Handler:
                 self.state_machine.transition_to(TutorialState.NORMAL_ATTACK_DETECTION)
                 return
         
-        # 检测自身位置
-        self_pos = self.detector.detect_self(timeout=5.0)
+        # 检测自身位置（使用更短超时，快速检测）
+        self_pos = self.detector.detect_self(timeout=0.5)
         if not self_pos:
-            self._log("无法检测自身位置，使用屏幕中心")
-            frame = self.task.frame
-            self_pos_x = frame.shape[1] // 2
-            self_pos_y = frame.shape[0] // 2
+            # 无法检测自身，使用最后已知位置或屏幕中心
+            if hasattr(self, '_last_self_pos') and self._last_self_pos:
+                self_pos_x, self_pos_y = self._last_self_pos
+            else:
+                frame = self.task.frame
+                self_pos_x = frame.shape[1] // 2
+                self_pos_y = frame.shape[0] // 2
         else:
             self_pos_x = self_pos.center_x
             self_pos_y = self_pos.center_y
+            self._last_self_pos = (self_pos_x, self_pos_y)
         
         # 计算距离
         distance = self.distance_calc.calculate_from_coords(
@@ -435,7 +460,12 @@ class Phase1Handler:
             self._target.center_x, self._target.center_y
         )
         
-        self._log(f"距离目标: {distance:.0f}px, 已移动: {elapsed_time:.1f}秒")
+        # 减少距离日志输出频率（每2秒输出一次）
+        if not hasattr(self, '_last_distance_log_time'):
+            self._last_distance_log_time = 0
+        if time.time() - self._last_distance_log_time > 2.0:
+            self._log(f"距离目标: {distance:.0f}px, 已移动: {elapsed_time:.1f}秒")
+            self._last_distance_log_time = time.time()
         
         # 移动靠近目标
         self.movement_ctrl.move_towards(
@@ -443,8 +473,8 @@ class Phase1Handler:
             self_pos_x, self_pos_y
         )
         
-        # 短暂等待后继续循环
-        time.sleep(0.1)
+        # 短暂等待后继续循环（减少等待时间以加快响应）
+        time.sleep(0.05)
     
     def _handle_normal_attack_detection(self):
         """处理普攻按钮检测"""
@@ -659,19 +689,59 @@ class Phase1Handler:
                     time.sleep(1)
                     continue
                 
-                # 自身位置检测
+                # 自身位置检测（带容错重试）
                 self_pos = state_detector.detect_self(timeout=15)
                 if self_pos is None:
-                    self._log_error("15秒未检测到自身位置，停止自动战斗")
-                    break
+                    self._log("【容错】15秒未检测到自身位置，尝试随机移动1秒后再次检测...")
+                    
+                    # 随机移动1秒
+                    import random
+                    directions = [
+                        (['W'], 3), (['S'], 2), (['A'], 2), (['D'], 2),
+                        (['W', 'A'], 2), (['W', 'D'], 2), (['S', 'A'], 1), (['S', 'D'], 1),
+                    ]
+                    weights = [w for _, w in directions]
+                    keys = random.choices([d[0] for d in directions], weights=weights, k=1)[0]
+                    self._log(f"【容错】随机移动方向: {'+'.join(keys)}, 持续1秒")
+                    self.movement_ctrl._press_movement_keys_for_duration(keys, 1.0)
+                    
+                    # 再次检测自身位置（10秒超时）
+                    self._log("【容错】随机移动后再次检测自身位置（10秒超时）...")
+                    self_pos = state_detector.detect_self(timeout=10)
+                    
+                    if self_pos is None:
+                        self._log_error("【容错】随机移动后仍10秒未检测到自身位置，停止自动战斗")
+                        self._save_error_screenshot("self_detection_failed_after_retry")
+                        break
+                    else:
+                        self._log(f"【容错】随机移动后成功检测到自身位置: ({self_pos.center_x}, {self_pos.center_y})")
+                
+                # 【抖动检测】记录当前位置
+                self._record_position(self_pos.center_x, self_pos.center_y)
+                
+                # 【抖动检测】检测是否存在 A-B-A-B 抖动模式
+                is_jitter = self._detect_jitter()
+                
+                # 简化日志输出：只在抖动检测失败且历史记录不足时输出
+                if not is_jitter and len(self._position_history) < 4:
+                    self._log(f"【抖动检测】历史记录不足: {len(self._position_history)}/4, 继续收集数据...")
+                
+                # 如果检测到抖动，执行随机移动并清空历史记录（确保下次抖动仍能触发）
+                if is_jitter:
+                    self._perform_random_move()
+                    # 清空位置历史，确保下次抖动检测能重新积累数据
+                    self._position_history.clear()
+                    self._log("【抖动检测】已清空位置历史，准备重新检测")
+                    # 随机移动后继续正常循环
+                    time.sleep(0.1)
+                    continue
                 
                 # 战场状态判断
                 state, allies, enemies = state_detector.get_battlefield_state_detailed()
                 last_state = state.value
                 
                 # 每次循环都输出详细的战场状态（便于调试随机移动问题）
-                if loop_count % 5 == 0:
-                    self._log(f"战场状态: {last_state}, 友方数量: {len(allies) if allies else 0}, 敌方数量: {len(enemies) if enemies else 0}")
+                self._log(f"战场状态: {last_state}, 友方: {len(allies) if allies else 0}, 敌方: {len(enemies) if enemies else 0}, 自身: ({self_pos.center_x},{self_pos.center_y})")
                 
                 # 根据战场状态处理
                 if state == BattlefieldState.NO_UNITS:
@@ -741,6 +811,9 @@ class Phase1Handler:
                         nearest = min(targets, key=lambda e: self.distance_calc.calculate(self_pos, e))
                         distance = self.distance_calc.calculate(self_pos, nearest)
                         
+                        # 【调试】输出自身、敌人坐标和距离（包含敌人数量信息）
+                        self._log(f"【战斗】敌人数量:{len(targets)}, 自身:({self_pos.center_x},{self_pos.center_y}), 敌人:({nearest.center_x},{nearest.center_y}), 距离:{distance:.0f}px")
+                        
                         # 【关键】保存敌人最后位置（用于 NO_UNITS 时的追踪）
                         self._last_enemy_pos = (nearest.center_x, nearest.center_y, time.time())
                         
@@ -749,12 +822,31 @@ class Phase1Handler:
                         
                         if distance <= 250:
                             # 距离在技能范围内（0-250），启动自动技能
+                            self._log(f"【战斗】距离{distance:.0f}px <= 250px，停止移动，开始攻击")
                             skill_ctrl.start_auto_skills()
                             skill_ctrl.update()
                             self.movement_ctrl.stop()
                         else:
                             # 距离超出技能范围，靠近目标
+                            self._log(f"【战斗】距离{distance:.0f}px > 250px，靠近敌人")
                             skill_ctrl.stop_auto_skills()
+                            # 【调试】输出移动方向
+                            dx = nearest.center_x - self_pos.center_x
+                            dy = nearest.center_y - self_pos.center_y
+                            self._log(f"【移动方向】dx:{dx:+.0f}, dy:{dy:+.0f}, 目标:({nearest.center_x},{nearest.center_y}), 自身:({self_pos.center_x},{self_pos.center_y})")
+                            
+                            # 【方向抖动检测】记录移动方向
+                            self._record_move_direction(dx, dy)
+                            
+                            # 【方向抖动检测】检测是否方向抖动
+                            is_direction_jitter = self._detect_direction_jitter()
+                            if is_direction_jitter:
+                                self._log("【方向抖动检测】检测到方向反复变化，执行随机移动")
+                                self._perform_random_move()
+                                self._move_direction_history.clear()  # 清空方向历史
+                                time.sleep(0.1)
+                                continue
+                            
                             self.movement_ctrl.move_towards(nearest.center_x, nearest.center_y,
                                                            self_pos.center_x, self_pos.center_y)
                 
@@ -820,11 +912,185 @@ class Phase1Handler:
         filename = f"{safe_name}_{time.strftime('%H-%M-%S')}.png"
         self.detector.save_screenshot(filename)
     
+    def _record_position(self, x: int, y: int):
+        """
+        记录位置历史，用于检测抖动
+        
+        检测逻辑：
+        - 如果当前位置与最后一个记录的位置距离 < 阈值：视为同一位置，不记录
+        - 如果当前位置与最后一个记录的位置距离 >= 阈值：视为新位置，记录
+        
+        Args:
+            x, y: 当前坐标
+        """
+        # 使用坐标阈值，相近的坐标视为同一点（10px内视为同一点）
+        COORD_THRESHOLD = 10  # 10像素内的坐标视为同一点
+        
+        # 检查是否与最后一个记录的位置相近
+        if self._position_history:
+            last_x, last_y = self._position_history[-1]
+            distance = ((x - last_x) ** 2 + (y - last_y) ** 2) ** 0.5
+            if distance < COORD_THRESHOLD:
+                # 位置相近，不记录（说明还在同一个区域）
+                self._skipped_record_count += 1
+                return
+        
+        # 位置与上一个记录的距离 >= 阈值，说明进入了新区域，记录
+        self._position_history.append((x, y))
+        self._last_recorded_pos = (x, y)
+        self._skipped_record_count = 0
+        
+        # 保持历史记录在限制范围内
+        if len(self._position_history) > self._position_history_max:
+            self._position_history.pop(0)
+        
+        # 输出记录信息（包含与上一个位置的距离）
+        if len(self._position_history) >= 2:
+            prev_x, prev_y = self._position_history[-2]
+            dist = ((x - prev_x) ** 2 + (y - prev_y) ** 2) ** 0.5
+            self._log(f"【位置记录】新位置: ({x},{y}) <- 距离上个位置{dist:.0f}px, 历史: {len(self._position_history)}个")
+        else:
+            self._log(f"【位置记录】首个位置: ({x},{y}), 历史: {len(self._position_history)}个")
+    
+    def _detect_jitter(self) -> bool:
+        """
+        检测是否存在抖动的模式
+        
+        检测逻辑：
+        1. 检查最近4个位置是否在两组区域之间来回移动 (A-B-A-B模式)
+        2. 使用聚类思想，将位置分为两组（A区和B区）
+        3. 如果模式是 A-B-A-B 或类似来回模式，则判定为抖动
+        
+        Returns:
+            bool: 如果检测到抖动返回 True
+        """
+        self._jitter_check_count += 1
+        
+        # 需要4个位置才能检测 A-B-A-B 模式
+        if len(self._position_history) < 4:
+            return False
+        
+        # 获取最近4个位置
+        pos = self._position_history[-4:]
+        
+        # 使用阈值来判断位置是否在同一区域
+        AREA_THRESHOLD = 100  # 100像素内视为同一区域
+        
+        # 检查是否在两组位置之间来回移动
+        # 简化检测：检查奇数位和偶数位是否分别聚类
+        even_positions = [pos[0], pos[2]]  # 第1,3个位置（偶数索引）- A区域
+        odd_positions = [pos[1], pos[3]]   # 第2,4个位置（奇数索引）- B区域
+        
+        # 计算偶数位置的平均中心点（A区域中心）
+        even_center_x = sum(p[0] for p in even_positions) / 2
+        even_center_y = sum(p[1] for p in even_positions) / 2
+        
+        # 计算奇数位置的平均中心点（B区域中心）
+        odd_center_x = sum(p[0] for p in odd_positions) / 2
+        odd_center_y = sum(p[1] for p in odd_positions) / 2
+        
+        # 检查偶数位置是否都靠近偶数中心点（A区域）
+        even_clustered = all(
+            ((p[0] - even_center_x) ** 2 + (p[1] - even_center_y) ** 2) ** 0.5 < AREA_THRESHOLD
+            for p in even_positions
+        )
+        
+        # 检查奇数位置是否都靠近奇数中心点（B区域）
+        odd_clustered = all(
+            ((p[0] - odd_center_x) ** 2 + (p[1] - odd_center_y) ** 2) ** 0.5 < AREA_THRESHOLD
+            for p in odd_positions
+        )
+        
+        # 检查A区域和B区域是否不同（有足够的距离）
+        distance_between_areas = ((even_center_x - odd_center_x) ** 2 + (even_center_y - odd_center_y) ** 2) ** 0.5
+        areas_are_different = distance_between_areas > AREA_THRESHOLD
+        
+        # 每10次检测或检测到抖动时输出详细调试信息
+        if self._jitter_check_count % 10 == 1 or (even_clustered and odd_clustered and areas_are_different):
+            history_str = " -> ".join([f"({x},{y})" for x, y in pos])
+            self._log(f"【抖动检测详情】位置历史: {history_str}")
+            self._log(f"【抖动检测详情】A区域中心: ({even_center_x:.0f},{even_center_y:.0f}), "
+                     f"B区域中心: ({odd_center_x:.0f},{odd_center_y:.0f}), "
+                     f"区域间距离: {distance_between_areas:.0f}px, "
+                     f"A区域聚类: {even_clustered}, B区域聚类: {odd_clustered}, 区域不同: {areas_are_different}")
+        
+        # 只有当偶数位置聚类、奇数位置聚类，且两个区域不同时，才判定为抖动
+        is_jitter = even_clustered and odd_clustered and areas_are_different
+        if is_jitter:
+            self._log(f"【抖动检测】✓ 检测到抖动! A-B-A-B模式确认")
+        return is_jitter
+    
+    def _record_move_direction(self, dx: float, dy: float):
+        """
+        记录移动方向历史，用于检测方向抖动
+        
+        Args:
+            dx, dy: 移动方向向量
+        """
+        # 只记录水平方向（dx）的符号，因为左右抖动是最常见的
+        direction_sign = 1 if dx > 0 else -1
+        
+        self._move_direction_history.append(direction_sign)
+        
+        # 保持历史记录在限制范围内
+        if len(self._move_direction_history) > self._move_direction_max:
+            self._move_direction_history.pop(0)
+    
+    def _detect_direction_jitter(self) -> bool:
+        """
+        检测是否存在方向抖动（左右反复变化）
+        
+        检测逻辑：
+        - 如果最近6次移动方向是 +1, -1, +1, -1, +1, -1（左右左右左右）或 -1, +1, -1, +1, -1, +1（右左右左右左）
+        - 则认为存在方向抖动
+        
+        Returns:
+            bool: 如果检测到方向抖动返回 True
+        """
+        if len(self._move_direction_history) < 6:
+            return False
+        
+        # 获取最近6个方向
+        dirs = self._move_direction_history[-6:]
+        
+        # 检测左右左右左右或右左右左右左模式
+        # 模式1: [+1, -1, +1, -1, +1, -1] (左右左右左右)
+        # 模式2: [-1, +1, -1, +1, -1, +1] (右左右左右左)
+        pattern1 = dirs == [1, -1, 1, -1, 1, -1]
+        pattern2 = dirs == [-1, 1, -1, 1, -1, 1]
+        
+        is_jitter = pattern1 or pattern2
+        
+        if is_jitter:
+            self._log(f"【方向抖动检测】方向历史: {dirs}, 模式1:{pattern1}, 模式2:{pattern2}")
+        
+        return is_jitter
+    
+    def _perform_random_move(self):
+        """执行随机移动，用于摆脱抖动"""
+        import random
+        
+        self._log("【抖动检测】检测到坐标抖动(A→B→A→B→A→B)，执行随机移动")
+        
+        # 随机选择一个方向移动2秒
+        directions = [
+            (['W'], 3), (['S'], 2), (['A'], 2), (['D'], 2),
+            (['W', 'A'], 2), (['W', 'D'], 2), (['S', 'A'], 1), (['S', 'D'], 1),
+        ]
+        weights = [w for _, w in directions]
+        keys = random.choices([d[0] for d in directions], weights=weights, k=1)[0]
+        
+        self._log(f"【抖动检测】随机移动方向: {'+'.join(keys)}, 持续2秒")
+        self.movement_ctrl._press_movement_keys_for_duration(keys, 2.0)
+    
     def cleanup(self):
         """清理资源"""
         self.detector.stop_phase1_end_detection()
         
         if self.movement_ctrl:
             self.movement_ctrl.stop()
+        
+        # 清空位置历史
+        self._position_history.clear()
         
         self._log("第一阶段资源清理完成")

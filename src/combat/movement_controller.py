@@ -178,14 +178,14 @@ class MovementController:
         dx = target_x - self_x
         dy = target_y - self_y
         
-        self.task.logger.info(f"[移动] 向目标移动: 自身({self_x}, {self_y}) -> 目标({target_x}, {target_y}), 偏移=({dx}, {dy})")
-        
         # 根据方向按键
         keys = self._calculate_keys(dx, dy)
         if keys:
+            self.task.logger.info(f"[移动] 向目标移动: 自身({self_x}, {self_y}) -> 目标({target_x}, {target_y}), 偏移=({dx}, {dy}), 按键={'+'.join(keys)}")
             self._press_movement_keys(keys)
+            self.task.logger.info(f"[移动] 移动执行完成: 按键 {'+'.join(keys)} 持续 {self.move_duration}秒")
         else:
-            self.task.logger.info("[移动] 偏移太小，不移动")
+            self.task.logger.info(f"[移动] 偏移太小，不移动: dx={dx}, dy={dy}")
     
     def _move_pc_away(self, target_x, target_y, self_x=None, self_y=None):
         """PC端远离目标"""
@@ -316,6 +316,7 @@ class MovementController:
 
         # ADB 模式：使用虚拟摇杆
         if self.is_adb():
+            self.task.logger.info(f"[移动] ADB模式移动: {'+'.join(keys)}, 持续{self.move_duration}秒")
             self._press_movement_keys_adb(keys, self.move_duration)
             return
 
@@ -324,20 +325,24 @@ class MovementController:
             self._stop_pc()
 
         key_str = '+'.join(keys)
-        self.task.logger.debug(f"[移动] 按下按键: {key_str}, 持续 {self.move_duration}秒")
+        self.task.logger.info(f"[移动] PC模式移动: 按键 {key_str}, 持续 {self.move_duration}秒")
 
         try:
             # 使用任务类的 send_key_down/up 方法（智能适配后台模式）
             for key in keys:
+                self.task.logger.info(f"[移动] 按下按键: {key}")
                 self.task.send_key_down(key)
 
+            self.task.logger.info(f"[移动] 等待 {self.move_duration}秒...")
             time.sleep(self.move_duration)
 
             for key in keys:
+                self.task.logger.info(f"[移动] 释放按键: {key}")
                 self.task.send_key_up(key)
 
             self._current_direction = keys
             self._is_moving = True
+            self.task.logger.info(f"[移动] 移动完成: 按键 {key_str}")
 
         except Exception as e:
             self.task.logger.error(f"[移动] 按键异常: {e}")

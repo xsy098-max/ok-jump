@@ -243,6 +243,7 @@ class StateDetector:
         """
         start_time = time.time()
         check_count = 0
+        last_log_time = 0  # 上次输出日志的时间
         
         while time.time() - start_time < timeout:
             # 检查退出信号
@@ -255,11 +256,21 @@ class StateDetector:
             
             frame = self._get_frame()
             if frame is None:
-                self._log("自身检测: 无法获取帧")
+                # 每2秒输出一次日志，避免日志过多
+                if time.time() - last_log_time > 2:
+                    self._log("自身检测: 无法获取帧，等待中...")
+                    last_log_time = time.time()
                 time.sleep(0.05)
                 continue
             
             check_count += 1
+            
+            # 每5秒输出一次检测进度（无论verbose模式）
+            elapsed = time.time() - start_time
+            if elapsed - (check_count * 0.03) > 5 and time.time() - last_log_time > 5:
+                self._log(f"自身检测进行中: {check_count}次检测, 已耗时{elapsed:.1f}秒")
+                last_log_time = time.time()
+            
             results = og.my_app.yolo_detect(
                 frame,
                 threshold=0.5,
@@ -269,17 +280,12 @@ class StateDetector:
             if results:
                 self._log(f"自身检测: 第{check_count}次检测成功, "
                          f"位置=({results[0].center_x}, {results[0].center_y}), "
-                         f"置信度={results[0].confidence:.2f}")
+                         f"置信度={results[0].confidence:.2f}, 耗时={elapsed:.1f}秒")
                 return results[0]  # 返回第一个检测到的自身位置
-            
-            # 每10次检测输出一次进度
-            if self._verbose and check_count % 10 == 0:
-                elapsed = time.time() - start_time
-                self._log(f"自身检测进行中: {check_count}次检测, 已耗时{elapsed:.1f}秒")
             
             time.sleep(0.03)  # 30ms，更快响应
         
-        self._log(f"自身检测超时: {check_count}次检测后仍未找到")
+        self._log(f"自身检测超时: {check_count}次检测后仍未找到, 总耗时{time.time() - start_time:.1f}秒")
         return None  # 超时未检测到
     
     def detect_self_once(self):

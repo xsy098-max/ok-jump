@@ -220,17 +220,7 @@ class SkillController:
             # 使用任务类的 send_key 方法（智能适配 ADB/Windows 模式）
             success = self.task.send_key(key)
 
-            if success:
-                mode = "ADB" if self.is_adb() else "Windows"
-                try:
-                    self.task.logger.info(f"[技能] 释放{skill_name}: {key} ({mode})")
-                except Exception:
-                    pass
-            else:
-                try:
-                    self.task.logger.error(f"[技能] 释放{skill_name}失败")
-                except Exception:
-                    pass
+            # 技能释放日志已禁用，避免日志过多
         except Exception as e:
             try:
                 self.task.logger.error(f"[技能] 释放{skill_name}失败: {e}")
@@ -250,7 +240,7 @@ class SkillController:
                 daemon=True
             )
             self._skill_thread.start()
-            self.task.logger.info("[技能] 自动技能监控线程已启动")
+            # 技能线程启动日志已禁用
     
     def stop_auto_skills(self):
         """停止自动技能（不停止线程，只禁用技能释放）"""
@@ -263,7 +253,7 @@ class SkillController:
         self._skill_thread_running = False
         if self._skill_thread and self._skill_thread.is_alive():
             self._skill_thread.join(timeout=1.0)
-        self.task.logger.info("[技能] 技能控制器已关闭")
+        # 技能控制器关闭日志已禁用
     
     def update_distance(self, distance: float):
         """
@@ -297,10 +287,7 @@ class SkillController:
         持续监控距离，在范围内时独立释放各技能
         每个技能独立冷却，互不影响
         """
-        try:
-            self.task.logger.info("[技能] 技能监控循环开始")
-        except Exception:
-            pass
+        # 技能监控循环开始日志已禁用
         log_counter = 0  # 用于定期输出状态
         
         while self._skill_thread_running:
@@ -313,19 +300,7 @@ class SkillController:
                 # 获取当前距离
                 distance = self.get_current_distance()
                 
-                # 每50次循环输出一次状态（约1秒）
-                log_counter += 1
-                if log_counter >= 50:
-                    log_counter = 0
-                    try:
-                        # 处理 distance 可能为 None 的情况
-                        distance_str = f"{distance:.0f}px" if distance is not None and isinstance(distance, (int, float)) else "未知"
-                        self.task.logger.info(f"[技能] 状态检查 - 距离: {distance_str}, "
-                                             f"范围内: {self.is_in_skill_range()}, "
-                                             f"普攻启用: {self._is_skill_enabled('自动普攻')}")
-                    except Exception:
-                        # 日志输出失败时忽略，避免影响技能释放
-                        pass
+                # 技能状态检查日志已禁用
                 
                 # 检查是否在技能释放范围内
                 if not self.is_in_skill_range():
@@ -347,10 +322,7 @@ class SkillController:
                     pass
                 time.sleep(0.1)
         
-        try:
-            self.task.logger.info("[技能] 技能监控循环结束")
-        except Exception:
-            pass
+        # 技能监控循环结束日志已禁用
     
     def _try_release_skills(self):
         """
