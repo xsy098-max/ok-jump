@@ -160,6 +160,10 @@ class Phase1Handler:
                 elif current_state == TutorialState.PHASE1_END_DETECTION:
                     self._handle_phase1_end_detection()
                 
+                elif current_state == TutorialState.PHASE1_END:
+                    self._log("第一阶段已完成，退出第一阶段处理器")
+                    return True
+                
                 else:
                     # 未知状态，跳过
                     time.sleep(0.1)
@@ -882,15 +886,15 @@ class Phase1Handler:
                         # 【关键修复】更新技能控制器的距离信息
                         skill_ctrl.update_distance(distance)
                         
-                        if distance <= 250:
-                            # 距离在技能范围内（0-250），启动自动技能
-                            self._log(f"【战斗】距离{distance:.0f}px <= 250px，停止移动，开始攻击")
+                        if distance <= 225:
+                            # 距离在技能范围内（0-225），启动自动技能
+                            self._log(f"【战斗】距离{distance:.0f}px <= 225px，停止移动，开始攻击")
                             skill_ctrl.start_auto_skills()
                             skill_ctrl.update()
                             self.movement_ctrl.stop()
                         else:
                             # 距离超出技能范围，靠近目标
-                            self._log(f"【战斗】距离{distance:.0f}px > 250px，靠近敌人")
+                            self._log(f"【战斗】距离{distance:.0f}px > 225px，靠近敌人")
                             skill_ctrl.stop_auto_skills()
                             # 【调试】输出移动方向
                             dx = nearest.center_x - self_pos.center_x

@@ -23,7 +23,6 @@ from src.tutorial.character_selector import CharacterSelector, CharacterType
 from src.tutorial.phase1_handler import Phase1Handler
 from src.tutorial.phase2_handler import Phase2Handler
 from src.utils import background_manager
-from src import jump_globals
 
 
 class AutoTutorialTask(BaseJumpTask):
@@ -174,7 +173,8 @@ class AutoTutorialTask(BaseJumpTask):
         self._phase1_handler.state_machine.transition_to(TutorialState.PHASE2_3V3)
         self._phase1_handler.state_machine.transition_to(TutorialState.COMPLETED)
         
-        # 标记全局教程完成状态
+        # 标记全局教程完成状态（延迟导入避免循环导入）
+        from src import jump_globals
         jump_globals.set_tutorial_completed(True)
         self.logger.info("新手引导全局完成状态已标记")
         

@@ -143,8 +143,8 @@ class SkillController:
         self._current_distance = float('inf')
         self._distance_lock = threading.Lock()
         
-        # 技能释放范围（0-250px）
-        self.skill_range_max = 250
+        # 技能释放范围（0-225px）
+        self.skill_range_max = 225
         self.skill_range_min = 0
     
     def is_adb(self):
@@ -273,7 +273,7 @@ class SkillController:
             return self._current_distance
     
     def is_in_skill_range(self) -> bool:
-        """检查是否在技能释放范围内（0-250px）"""
+        """检查是否在技能释放范围内（0-225px）"""
         distance = self.get_current_distance()
         # 处理 None 或无效距离值
         if distance is None or not isinstance(distance, (int, float)):

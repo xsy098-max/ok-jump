@@ -219,35 +219,156 @@ class Phase2Handler:
     
     # ==================== 步骤 2.2: 双加载界面等待 ====================
     
+    def _check_battle_start_sign(self) -> bool:
+        """
+        检测战斗开始标志（积分争夺）
+        
+        用于在加载过程中提前检测战斗是否已开始
+        检测方式与步骤 2.3 战斗开始检测一致
+        
+        Returns:
+            bool: 是否检测到战斗开始标志
+        """
+        # 方法1: 模板匹配 fight_start.png
+        try:
+            fight_start = self.task.find_one(Features.TUTORIAL_FIGHT_START, threshold=0.6)
+            if fight_start:
+                return True
+        except (ValueError, Exception):
+            pass
+        
+        # 方法2: OCR检测"积分争夺"（简繁双语）
+        if self._detect_text_bilingual("积分争夺", "積分爭奪"):
+            return True
+        
+        return False
+    
+    def _wait_loading_start_with_battle_check(self, timeout: float, phase_name: str) -> str:
+        """
+        等待加载开始，同时检测战斗开始标志
+        
+        Args:
+            timeout: 超时时间
+            phase_name: 阶段名称（用于日志）
+            
+        Returns:
+            str: "success" - 检测到加载开始
+                 "battle_started" - 检测到战斗开始标志
+                 "timeout" - 超时
+                 "exit" - 请求退出
+        """
+        start_time = time.time()
+        check_interval = 1.0  # 每次检测加载的间隔
+        
+        while time.time() - start_time < timeout:
+            if self._should_exit():
+                return "exit"
+            
+            self.task.next_frame()
+            
+            # 检测战斗开始标志
+            if self._check_battle_start_sign():
+                self._log(f"[容错] {phase_name}等待期间检测到战斗开始标志（积分争夺）")
+                return "battle_started"
+            
+            # 检测加载开始（使用短超时）
+            if self.detector.detect_loading_start(timeout=check_interval):
+                return "success"
+        
+        return "timeout"
+    
+    def _wait_loading_end_with_battle_check(self, timeout: float, stuck_timeout: float, phase_name: str) -> str:
+        """
+        等待加载结束，同时检测战斗开始标志
+        
+        Args:
+            timeout: 总超时时间
+            stuck_timeout: 停滞检测超时时间
+            phase_name: 阶段名称（用于日志）
+            
+        Returns:
+            str: "success" - 加载正常结束
+                 "battle_started" - 检测到战斗开始标志
+                 "timeout" - 超时或停滞
+                 "exit" - 请求退出
+        """
+        start_time = time.time()
+        check_interval = 5.0  # 每次分段检测的时长
+        battle_check_interval = 2.0  # 战斗标志检测间隔
+        last_battle_check = 0
+        
+        while time.time() - start_time < timeout:
+            if self._should_exit():
+                return "exit"
+            
+            current_time = time.time()
+            
+            # 定期检测战斗开始标志
+            if current_time - last_battle_check >= battle_check_interval:
+                self.task.next_frame()
+                if self._check_battle_start_sign():
+                    self._log(f"[容错] {phase_name}等待期间检测到战斗开始标志（积分争夺）")
+                    return "battle_started"
+                last_battle_check = current_time
+            
+            # 分段检测加载结束
+            remaining_time = timeout - (current_time - start_time)
+            segment_timeout = min(check_interval, remaining_time)
+            segment_stuck = min(stuck_timeout, remaining_time)
+            
+            if self.detector.detect_loading_end(timeout=segment_timeout, stuck_timeout=segment_stuck):
+                return "success"
+            
+            # 如果不是正常完成，继续循环检测
+        
+        return "timeout"
+    
     def _wait_double_loading(self) -> bool:
         """
         等待双加载界面
         
         第一个加载 → 两个加载之间的容错窗口 → 第二个加载
         
+        容错机制：如果在等待加载界面的过程中检测到了"积分争夺"文字/图片，
+        则跳过当前加载界面的等待，直接进入战斗开始检测阶段
+        
         Returns:
             bool: 是否成功
         """
         loading_gap_tolerance = self._cfg('加载界面间隔容错(秒)', 15.0)
         
-        # 第一个加载界面
+        # ========== 第一个加载界面 ==========
         self._log("等待第一个加载界面...")
         self.detector.reset_loading_state()
         
-        if not self.detector.detect_loading_start(timeout=30.0):
+        # 等待第一个加载开始（带战斗检测）
+        result = self._wait_loading_start_with_battle_check(30.0, "第一个加载界面")
+        if result == "exit":
+            return False
+        elif result == "battle_started":
+            self._log("提前检测到战斗开始标志，跳过剩余加载等待")
+            return True
+        elif result == "timeout":
             self._log_error("第一个加载界面未检测到")
             self._save_error_screenshot("first_loading_not_found")
             return False
         
+        # 等待第一个加载结束（带战斗检测）
         self._log("第一个加载界面开始，等待加载完成...")
-        if not self.detector.detect_loading_end(timeout=120.0, stuck_timeout=60.0):
+        result = self._wait_loading_end_with_battle_check(120.0, 60.0, "第一个加载界面")
+        if result == "exit":
+            return False
+        elif result == "battle_started":
+            self._log("提前检测到战斗开始标志，跳过剩余加载等待")
+            return True
+        elif result == "timeout":
             self._log_error("第一个加载界面超时或停滞")
             self._save_error_screenshot("first_loading_timeout")
             return False
         
         self._log("第一个加载界面结束")
         
-        # 两个加载之间的容错窗口
+        # ========== 两个加载之间的容错窗口 ==========
         self._log(f"等待第二个加载界面（容错窗口: {loading_gap_tolerance}秒）...")
         self.detector.reset_loading_state()  # 重置状态，因为第二个加载百分比可能比第一个结束时小
         
@@ -260,6 +381,11 @@ class Phase2Handler:
             
             self.task.next_frame()
             
+            # 检测战斗开始标志
+            if self._check_battle_start_sign():
+                self._log("[容错] 容错窗口期间检测到战斗开始标志（积分争夺），跳过剩余加载等待")
+                return True
+            
             if self.detector.detect_loading_start(timeout=1.0):
                 second_loading_found = True
                 break
@@ -267,12 +393,24 @@ class Phase2Handler:
             time.sleep(0.2)
         
         if not second_loading_found:
+            # 最后检查一次战斗开始标志
+            self.task.next_frame()
+            if self._check_battle_start_sign():
+                self._log("[容错] 容错窗口结束时检测到战斗开始标志（积分争夺），跳过第二个加载等待")
+                return True
             self._log_error(f"第二个加载界面未在 {loading_gap_tolerance}秒内出现")
             self._save_error_screenshot("second_loading_not_found")
             return False
         
+        # ========== 第二个加载界面 ==========
         self._log("第二个加载界面开始，等待加载完成...")
-        if not self.detector.detect_loading_end(timeout=120.0, stuck_timeout=60.0):
+        result = self._wait_loading_end_with_battle_check(120.0, 60.0, "第二个加载界面")
+        if result == "exit":
+            return False
+        elif result == "battle_started":
+            self._log("提前检测到战斗开始标志，跳过剩余加载等待")
+            return True
+        elif result == "timeout":
             self._log_error("第二个加载界面超时或停滞")
             self._save_error_screenshot("second_loading_timeout")
             return False
