@@ -52,8 +52,12 @@ class MovementController:
         self._background_input_initialized = False
         
         # 手机端虚拟摇杆配置（相对位置）
-        self.joystick_center = (0.15, 0.7)  # 摇杆中心相对位置
-        self.joystick_radius = 50  # 摇杆半径（像素）
+        # 基于 1920x1080 分辨率的摇杆坐标：
+        # 最上：(410, 700), 最左：(260, 850), 最下：(410, 1000), 最右：(560, 850)
+        # 中心：(410, 850), 半径：150
+        self.joystick_center = (0.214, 0.787)  # 摇杆中心相对位置 (410/1920, 850/1080)
+        self.joystick_radius = 150  # 摇杆半径（像素）
+        self.joystick_base_resolution = (1920, 1080)  # 基准分辨率
     
     def set_move_duration(self, duration):
         """
@@ -483,10 +487,25 @@ class MovementController:
         end_y = int(cy + dy)
 
         key_str = '+'.join(keys)
-        self.task.logger.debug(f"[移动] ADB 摇杆: {key_str}, 持续 {duration}秒")
+        self.task.logger.info(f"[ADB移动] 方向: {key_str}, 持续 {duration}秒, 摇杆: ({cx},{cy}) -> ({end_x},{end_y})")
 
-        # 使用 swipe 来模拟按住摇杆
-        self.task.swipe(cx, cy, end_x, end_y, duration=duration)
+        # 【关键修复】模拟朝敌人移动的方式：
+        # 在循环中持续发送短时间 swipe，形成连续移动
+        # 这与 move_towards 的工作方式一致
+        try:
+            import time
+            start_time = time.time()
+            swipe_duration = self.move_duration  # 使用配置的移动持续时间（默认 0.5 秒）
+            
+            while time.time() - start_time < duration:
+                # 每次发送短时间 swipe
+                self.task.swipe(cx, cy, end_x, end_y, duration=swipe_duration, after_sleep=0)
+                # 短暂间隔（模拟主循环间隔）
+                time.sleep(0.05)
+            
+            self.task.logger.info(f"[ADB移动] 完成: {key_str} 方向移动 {duration}秒")
+        except Exception as e:
+            self.task.logger.error(f"[ADB移动] 异常: {e}")
 
         self._current_direction = keys
         self._is_moving = True
@@ -494,47 +513,98 @@ class MovementController:
     # ==================== 手机端移动（虚拟摇杆） ====================
     
     def _get_joystick_center_px(self):
-        """获取摇杆中心的像素坐标"""
+        """
+        获取摇杆中心的像素坐标（支持分辨率适配）
+        
+        根据当前屏幕分辨率相对于基准分辨率(1920x1080)进行缩放
+        """
         frame = self.task.frame
         if frame is None:
             return None, None
         
         height, width = frame.shape[:2]
-        cx = int(width * self.joystick_center[0])
-        cy = int(height * self.joystick_center[1])
+        current_resolution = (width, height)
+        
+        # 计算相对于基准分辨率的缩放比例
+        base_width, base_height = self.joystick_base_resolution
+        scale_x = width / base_width
+        scale_y = height / base_height
+        
+        # 基准坐标
+        base_cx = 410  # 摇杆中心x坐标（1920x1080下）
+        base_cy = 850  # 摇杆中心y坐标（1920x1080下）
+        
+        # 根据当前分辨率缩放
+        cx = int(base_cx * scale_x)
+        cy = int(base_cy * scale_y)
+        
         return cx, cy
     
+    def _get_joystick_radius_px(self):
+        """
+        获取摇杆半径的像素值（支持分辨率适配）
+        
+        Returns:
+            int: 适配当前分辨率的摇杆半径
+        """
+        frame = self.task.frame
+        if frame is None:
+            return self.joystick_radius
+        
+        height, width = frame.shape[:2]
+        base_width, base_height = self.joystick_base_resolution
+        
+        # 使用宽度的缩放比例（保持圆形比例）
+        scale = width / base_width
+        return int(self.joystick_radius * scale)
+    
     def _move_adb_towards(self, target_x, target_y):
-        """手机端向目标移动（虚拟摇杆）"""
+        """
+        手机端向目标移动（虚拟摇杆）
+        
+        直接将摇杆滑动到敌人坐标对应的位置（而非方向）
+        """
         cx, cy = self._get_joystick_center_px()
         if cx is None:
             return
+        
+        # 获取适配后的摇杆半径
+        radius = self._get_joystick_radius_px()
 
-        # 获取屏幕中心作为自身参考
+        # 计算目标相对于屏幕中心的位置，映射到摇杆范围内
+        # 获取屏幕尺寸
         frame = self.task.frame
-        self_x = frame.shape[1] // 2
-        self_y = frame.shape[0] // 2
-
-        # 计算滑动方向
-        dx = target_x - self_x
-        dy = target_y - self_y
-        length = math.sqrt(dx * dx + dy * dy)
-
-        if length < 1:
-            return
-
-        # 归一化并缩放到摇杆半径
-        dx = dx / length * self.joystick_radius
-        dy = dy / length * self.joystick_radius
+        screen_w = frame.shape[1]
+        screen_h = frame.shape[0]
+        
+        # 计算目标相对于屏幕中心的比例（-1到1）
+        dx_ratio = (target_x - screen_w / 2) / (screen_w / 2)
+        dy_ratio = (target_y - screen_h / 2) / (screen_h / 2)
+        
+        # 将比例映射到摇杆半径范围内
+        dx = dx_ratio * radius
+        dy = dy_ratio * radius
+        
+        # 限制在摇杆范围内
+        distance = math.sqrt(dx * dx + dy * dy)
+        if distance > radius:
+            dx = dx / distance * radius
+            dy = dy / distance * radius
 
         # 执行滑动（使用配置的移动持续时间）
-        self.task.swipe(cx, cy, int(cx + dx), int(cy + dy), duration=self.move_duration)
+        end_x = int(cx + dx)
+        end_y = int(cy + dy)
+        self.task.logger.info(f"[ADB移动] 摇杆中心:({cx},{cy}), 半径:{radius}, 目标:({target_x},{target_y}), 映射:({end_x},{end_y}), 比例:({dx_ratio:.2f},{dy_ratio:.2f})")
+        self.task.swipe(cx, cy, end_x, end_y, duration=self.move_duration)
 
     def _move_adb_away(self, target_x, target_y):
         """手机端远离目标"""
         cx, cy = self._get_joystick_center_px()
         if cx is None:
             return
+        
+        # 获取适配后的摇杆半径
+        radius = self._get_joystick_radius_px()
 
         frame = self.task.frame
         self_x = frame.shape[1] // 2
@@ -548,8 +618,8 @@ class MovementController:
         if length < 1:
             return
 
-        dx = dx / length * self.joystick_radius
-        dy = dy / length * self.joystick_radius
+        dx = dx / length * radius
+        dy = dy / length * radius
 
         # 执行滑动（使用配置的移动持续时间）
         self.task.swipe(cx, cy, int(cx + dx), int(cy + dy), duration=self.move_duration)
@@ -560,12 +630,25 @@ class MovementController:
         if cx is None:
             return
         
-        # 向左滑动
-        self.task.swipe(cx, cy, cx - self.joystick_radius, cy, duration=duration)
-        time.sleep(0.1)
+        # 获取适配后的摇杆半径
+        radius = self._get_joystick_radius_px()
         
-        # 向右滑动
-        self.task.swipe(cx, cy, cx + self.joystick_radius, cy, duration=duration)
+        # 【修复】使用循环发送短时间 swipe，与 move_towards 一致
+        start_time = time.time()
+        swipe_duration = self.move_duration  # 使用配置的移动持续时间
+        
+        while time.time() - start_time < duration:
+            # 向左滑动
+            self.task.swipe(cx, cy, cx - radius, cy, duration=swipe_duration, after_sleep=0)
+            time.sleep(0.05)
+            
+            # 检查是否超时
+            if time.time() - start_time >= duration:
+                break
+            
+            # 向右滑动
+            self.task.swipe(cx, cy, cx + radius, cy, duration=swipe_duration, after_sleep=0)
+            time.sleep(0.05)
     
     def _move_adb_up(self, duration=1):
         """手机端向上移动"""
@@ -573,7 +656,17 @@ class MovementController:
         if cx is None:
             return
         
-        self.task.swipe(cx, cy, cx, cy - self.joystick_radius, duration=duration)
+        # 获取适配后的摇杆半径
+        radius = self._get_joystick_radius_px()
+        
+        # 【修复】使用循环发送短时间 swipe，与 move_towards 一致
+        start_time = time.time()
+        swipe_duration = self.move_duration  # 使用配置的移动持续时间
+        end_x, end_y = cx, cy - radius
+        
+        while time.time() - start_time < duration:
+            self.task.swipe(cx, cy, end_x, end_y, duration=swipe_duration, after_sleep=0)
+            time.sleep(0.05)
     
     def _stop_adb(self):
         """手机端停止移动（释放摇杆）"""

@@ -624,15 +624,25 @@ class Phase1Handler:
             from src.combat.state_detector import StateDetector
             from src.combat.skill_controller import SkillController
             from src.combat import BattlefieldState
+            from src.task.AutoCombatTask import AutoCombatTask
             import random
             
-            # 初始化战斗控制器
+            # 初始化战斗控制器（与AutoCombatTask保持一致）
             state_detector = StateDetector(self.task)
             state_detector.set_verbose(self._verbose)
             
             # 创建配置适配器，使 SkillController 能读取 AutoCombatTask 的配置
             combat_config_adapter = self._create_combat_config_adapter()
             skill_ctrl = SkillController(combat_config_adapter)
+            
+            # 【关键】复用AutoCombatTask的战场处理方法
+            # 创建临时AutoCombatTask实例，注入当前控制器
+            auto_combat = AutoCombatTask(self.task.executor, self.task)
+            auto_combat.state_detector = state_detector
+            auto_combat.movement_ctrl = self.movement_ctrl
+            auto_combat.skill_ctrl = skill_ctrl
+            auto_combat.distance_calc = self.distance_calc
+            auto_combat.logger = self.task.logger
             
             # 输出当前战斗配置（详细日志模式）
             if self._verbose:
@@ -696,13 +706,14 @@ class Phase1Handler:
                     
                     # 随机移动1秒
                     import random
+                    random.seed()  # 重置随机种子确保每次都是真正随机
                     directions = [
                         (['W'], 3), (['S'], 2), (['A'], 2), (['D'], 2),
                         (['W', 'A'], 2), (['W', 'D'], 2), (['S', 'A'], 1), (['S', 'D'], 1),
                     ]
                     weights = [w for _, w in directions]
                     keys = random.choices([d[0] for d in directions], weights=weights, k=1)[0]
-                    self._log(f"【容错】随机移动方向: {'+'.join(keys)}, 持续1秒")
+                    self._log(f"【容错】随机移动方向: {'+'.join(keys)}, 持续1秒 (权重随机)")
                     self.movement_ctrl._press_movement_keys_for_duration(keys, 1.0)
                     
                     # 再次检测自身位置（10秒超时）
@@ -718,6 +729,16 @@ class Phase1Handler:
                 
                 # 【抖动检测】记录当前位置
                 self._record_position(self_pos.center_x, self_pos.center_y)
+                
+                # 【卡住检测】检测是否连续6次在同一坐标（角色被卡住）
+                is_stuck = self._detect_stuck()
+                if is_stuck:
+                    self._log("【卡住检测】连续6次检测到相同坐标，角色可能被卡住，向下移动1秒")
+                    self.movement_ctrl._press_movement_keys_for_duration(['S'], 1.0)
+                    # 清空位置历史，重新检测
+                    self._position_history.clear()
+                    time.sleep(0.1)
+                    continue
                 
                 # 【抖动检测】检测是否存在 A-B-A-B 抖动模式
                 is_jitter = self._detect_jitter()
@@ -771,8 +792,10 @@ class Phase1Handler:
                                 (['W', 'A'], 2), (['W', 'D'], 2), (['S', 'A'], 1), (['S', 'D'], 1),
                             ]
                             weights = [w for _, w in directions]
+                            # 【修复】重置随机种子确保每次都是真正随机
+                            random.seed()
                             keys = random.choices([d[0] for d in directions], weights=weights, k=1)[0]
-                            self._log(f"随机移动: {'+'.join(keys)} 方向")
+                            self._log(f"随机移动: {'+'.join(keys)} 方向 (权重随机)")
                             self.movement_ctrl._press_movement_keys_for_duration(keys, 3.0)
                     else:
                         # 确实没有敌人信息，随机移动搜索
@@ -784,8 +807,11 @@ class Phase1Handler:
                             (['W', 'A'], 2), (['W', 'D'], 2), (['S', 'A'], 1), (['S', 'D'], 1),
                         ]
                         weights = [w for _, w in directions]
+                        # 【修复】使用 random.randint 确保每次都是真正随机
+                        import random
+                        random.seed()  # 重置随机种子
                         keys = random.choices([d[0] for d in directions], weights=weights, k=1)[0]
-                        self._log(f"随机移动: {'+'.join(keys)} 方向")
+                        self._log(f"随机移动: {'+'.join(keys)} 方向 (权重随机)")
                         self.movement_ctrl._press_movement_keys_for_duration(keys, 3.0)
                 
                 elif state == BattlefieldState.ALLIES_ONLY:
@@ -807,8 +833,44 @@ class Phase1Handler:
                     # 有敌人：向最近的敌人移动并攻击
                     targets = enemies if state == BattlefieldState.ENEMIES_ONLY else enemies
                     if targets:
-                        # 获取最近的敌人
-                        nearest = min(targets, key=lambda e: self.distance_calc.calculate(self_pos, e))
+                        # 【目标锁定】优先使用已锁定的目标，避免频繁切换
+                        if not hasattr(self, '_locked_enemy'):
+                            self._locked_enemy = None
+                            self._locked_enemy_time = 0
+                        
+                        # 尝试找到与锁定目标最接近的敌人
+                        if self._locked_enemy is not None:
+                            locked_x, locked_y = self._locked_enemy
+                            # 寻找距离锁定位置最近的敌人
+                            best_match = None
+                            min_offset = float('inf')
+                            for enemy in targets:
+                                offset = abs(enemy.center_x - locked_x) + abs(enemy.center_y - locked_y)
+                                if offset < min_offset:
+                                    min_offset = offset
+                                    best_match = enemy
+                            
+                            # 如果匹配成功（在200像素范围内），使用匹配的目标
+                            if best_match and min_offset < 200:
+                                nearest = best_match
+                                # 更新锁定位置
+                                self._locked_enemy = (nearest.center_x, nearest.center_y)
+                                self._locked_enemy_time = time.time()
+                                # 每5秒输出一次锁定信息
+                                if loop_count % 100 == 0:
+                                    self._log(f"【目标锁定】保持锁定: ({nearest.center_x},{nearest.center_y}), 偏移:{min_offset:.0f}px")
+                            else:
+                                # 锁定目标丢失，重新选择最近的
+                                nearest = min(targets, key=lambda e: self.distance_calc.calculate(self_pos, e))
+                                self._locked_enemy = (nearest.center_x, nearest.center_y)
+                                self._locked_enemy_time = time.time()
+                                self._log(f"【目标锁定】重新锁定目标: ({nearest.center_x},{nearest.center_y})")
+                        else:
+                            # 没有锁定目标，获取最近的敌人并锁定
+                            nearest = min(targets, key=lambda e: self.distance_calc.calculate(self_pos, e))
+                            self._locked_enemy = (nearest.center_x, nearest.center_y)
+                            self._locked_enemy_time = time.time()
+                        
                         distance = self.distance_calc.calculate(self_pos, nearest)
                         
                         # 【调试】输出自身、敌人坐标和距离（包含敌人数量信息）
@@ -1020,6 +1082,42 @@ class Phase1Handler:
             self._log(f"【抖动检测】✓ 检测到抖动! A-B-A-B模式确认")
         return is_jitter
     
+    def _detect_stuck(self) -> bool:
+        """
+        检测角色是否被卡住（连续6次检测到相同坐标）
+        
+        检测逻辑：
+        - 如果最近6个位置都在10像素范围内，认为角色被卡住
+        - 每次触发后清空历史，允许再次检测
+        
+        Returns:
+            bool: 如果检测到卡住返回 True
+        """
+        STUCK_THRESHOLD = 10  # 10像素内视为同一位置
+        STUCK_COUNT = 6  # 连续6次
+        
+        if len(self._position_history) < STUCK_COUNT:
+            return False
+        
+        # 获取最近6个位置
+        recent_positions = self._position_history[-STUCK_COUNT:]
+        
+        # 计算这6个位置的平均中心点
+        avg_x = sum(p[0] for p in recent_positions) / STUCK_COUNT
+        avg_y = sum(p[1] for p in recent_positions) / STUCK_COUNT
+        
+        # 检查所有位置是否都在阈值范围内
+        all_same = all(
+            ((p[0] - avg_x) ** 2 + (p[1] - avg_y) ** 2) ** 0.5 < STUCK_THRESHOLD
+            for p in recent_positions
+        )
+        
+        if all_same:
+            positions_str = " -> ".join([f"({x},{y})" for x, y in recent_positions])
+            self._log(f"【卡住检测】连续{STUCK_COUNT}次相同坐标: {positions_str}")
+        
+        return all_same
+    
     def _record_move_direction(self, dx: float, dy: float):
         """
         记录移动方向历史，用于检测方向抖动
@@ -1069,6 +1167,7 @@ class Phase1Handler:
     def _perform_random_move(self):
         """执行随机移动，用于摆脱抖动"""
         import random
+        random.seed()  # 重置随机种子确保每次都是真正随机
         
         self._log("【抖动检测】检测到坐标抖动(A→B→A→B→A→B)，执行随机移动")
         
@@ -1080,7 +1179,7 @@ class Phase1Handler:
         weights = [w for _, w in directions]
         keys = random.choices([d[0] for d in directions], weights=weights, k=1)[0]
         
-        self._log(f"【抖动检测】随机移动方向: {'+'.join(keys)}, 持续2秒")
+        self._log(f"【抖动检测】随机移动方向: {'+'.join(keys)}, 持续2秒 (权重随机)")
         self.movement_ctrl._press_movement_keys_for_duration(keys, 2.0)
     
     def cleanup(self):
