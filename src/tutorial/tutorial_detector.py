@@ -269,7 +269,26 @@ class TutorialDetector:
         return None
     
     # ==================== 加载界面检测 ====================
+    
+    # 加载界面检测状态（用于支持多次加载场景）
+    _loading_last_percentage = None
+    _loading_stuck_time = None
+    
+    def reset_loading_state(self):
+        """
+        重置加载界面检测状态
         
+        在需要检测多次加载界面的场景中调用（如第二阶段的双加载界面），
+        确保每次加载界面检测都从干净的状态开始。
+        
+        重置的内容：
+        - 上次检测到的百分比
+        - 停滞检测时间
+        """
+        self._loading_last_percentage = None
+        self._loading_stuck_time = None
+        self._log("加载界面检测状态已重置")
+    
     def _detect_loading_percentage(self):
         """
         检测右下角的加载百分比（与AutoLoginTask保持一致）
@@ -342,22 +361,20 @@ class TutorialDetector:
             
         return False
     
-    def detect_loading_end(self, timeout: float = 60.0) -> bool:
+    def detect_loading_end(self, timeout: float = 60.0, stuck_timeout: float = 60.0) -> bool:
         """
         检测加载界面结束
             
         通过检测百分比消失或达到100%判断（与AutoLoginTask保持一致）
             
         Args:
-            timeout: 超时时间（秒）
+            timeout: 总体超时时间（秒）
+            stuck_timeout: 加载停滞超时时间（秒），默认60秒
                 
         Returns:
             bool: 是否检测到加载结束
         """
         start_time = time.time()
-        last_percentage = None
-        stuck_time = None
-        STUCK_TIMEOUT = 60.0  # 加载停滞超时
             
         while time.time() - start_time < timeout:
             if hasattr(self.task, '_should_exit') and self.task._should_exit():
@@ -374,20 +391,20 @@ class TutorialDetector:
                     self._log(f"加载完成: {percentage}%")
                     return True
                     
-                # 检查是否停滞
-                if last_percentage == percentage:
-                    if stuck_time is None:
-                        stuck_time = time.time()
-                    elif time.time() - stuck_time > STUCK_TIMEOUT:
-                        self._log(f"加载停滞超时：卡在 {percentage}% 超过 {STUCK_TIMEOUT} 秒")
+                # 检查是否停滞（使用实例变量）
+                if self._loading_last_percentage == percentage:
+                    if self._loading_stuck_time is None:
+                        self._loading_stuck_time = time.time()
+                    elif time.time() - self._loading_stuck_time > stuck_timeout:
+                        self._log(f"加载停滞超时：卡在 {percentage}% 超过 {stuck_timeout} 秒")
                         return False
                 else:
-                    stuck_time = None
-                    last_percentage = percentage
+                    self._loading_stuck_time = None
+                    self._loading_last_percentage = percentage
                     self._log(f"加载进度: {percentage}%")
             else:
                 # 未检测到百分比，可能加载已完成
-                if last_percentage is not None:
+                if self._loading_last_percentage is not None:
                     self._log("加载界面结束（百分比消失）")
                     return True
                 

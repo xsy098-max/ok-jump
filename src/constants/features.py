@@ -86,6 +86,10 @@ class Features:
     TUTORIAL_CONFIRM_BUTTON = 'tutorial_confirm_button' # 确定按钮
     TUTORIAL_END01 = 'tutorial_end01'                   # 第一阶段结束标志
     TUTORIAL_END02 = 'tutorial_end02'                   # 开始对战按钮
+    TUTORIAL_FIGHT_START = 'fight_start'                # 战斗开始标志
+    TUTORIAL_FIGHT_END = 'fight_end'                    # 战斗结束标志
+    TUTORIAL_MVP_OUT = 'out'                            # MVP场景退出按钮
+    TUTORIAL_NEW_HERO = 'new_hero'                      # 新英雄场景标志
 
 
 # 便于导入的别名
