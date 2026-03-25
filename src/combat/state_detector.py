@@ -242,8 +242,15 @@ class StateDetector:
             DetectionResult: 自身位置，超时返回 None
         """
         start_time = time.time()
-        check_count = 0
-        last_log_time = 0  # 上次输出日志的时间
+        check_count = 0              # 总检测次数
+        null_frame_count = 0         # 帧为None次数
+        first_frame_logged = False   # 是否已记录首帧
+        last_null_frame_log_time = 0  # 上次输出帧获取失败日志的时间
+        last_no_detect_log_time = 0   # 上次输出未检测到日志的时间
+        
+        # 进入方法时输出日志
+        if hasattr(self.task, 'logger'):
+            self.task.logger.info(f"[自身检测] 开始检测, 超时={timeout}秒")
         
         while time.time() - start_time < timeout:
             # 检查退出信号
@@ -255,21 +262,26 @@ class StateDetector:
                 self.task.next_frame()
             
             frame = self._get_frame()
+            elapsed = time.time() - start_time
+            
             if frame is None:
-                # 每2秒输出一次日志，避免日志过多
-                if time.time() - last_log_time > 2:
-                    self._log("自身检测: 无法获取帧，等待中...")
-                    last_log_time = time.time()
+                null_frame_count += 1
+                # 每2秒输出一次帧获取失败日志，避免刷屏
+                if time.time() - last_null_frame_log_time >= 2:
+                    if hasattr(self.task, 'logger'):
+                        self.task.logger.warning(f"[自身检测] 帧获取失败(None), 已等待{elapsed:.1f}秒, 尝试{null_frame_count}次")
+                    last_null_frame_log_time = time.time()
                 time.sleep(0.05)
                 continue
             
-            check_count += 1
+            # 首次获取到帧时输出日志
+            if not first_frame_logged:
+                h, w = frame.shape[:2]
+                if hasattr(self.task, 'logger'):
+                    self.task.logger.info(f"[自身检测] 首次获取到帧, 尺寸={w}x{h}")
+                first_frame_logged = True
             
-            # 每5秒输出一次检测进度（无论verbose模式）
-            elapsed = time.time() - start_time
-            if elapsed - (check_count * 0.03) > 5 and time.time() - last_log_time > 5:
-                self._log(f"自身检测进行中: {check_count}次检测, 已耗时{elapsed:.1f}秒")
-                last_log_time = time.time()
+            check_count += 1
             
             results = og.my_app.yolo_detect(
                 frame,
@@ -278,14 +290,25 @@ class StateDetector:
             )
             
             if results:
-                self._log(f"自身检测: 第{check_count}次检测成功, "
-                         f"位置=({results[0].center_x}, {results[0].center_y}), "
-                         f"置信度={results[0].confidence:.2f}, 耗时={elapsed:.1f}秒")
+                # 检测成功
+                if hasattr(self.task, 'logger'):
+                    self.task.logger.info(
+                        f"[自身检测] 成功! 位置=({results[0].center_x},{results[0].center_y}), "
+                        f"置信度={results[0].confidence:.2f}, 耗时{elapsed:.1f}秒, 共检测{check_count}次"
+                    )
                 return results[0]  # 返回第一个检测到的自身位置
+            else:
+                # 每3秒输出一次未检测到日志，避免刷屏
+                if time.time() - last_no_detect_log_time >= 3:
+                    if hasattr(self.task, 'logger'):
+                        self.task.logger.warning(f"[自身检测] 未检测到自身, 已耗时{elapsed:.1f}秒, 已检测{check_count}次")
+                    last_no_detect_log_time = time.time()
             
             time.sleep(0.03)  # 30ms，更快响应
         
-        self._log(f"自身检测超时: {check_count}次检测后仍未找到, 总耗时{time.time() - start_time:.1f}秒")
+        # 超时时输出详细日志
+        if hasattr(self.task, 'logger'):
+            self.task.logger.warning(f"[自身检测] 超时! {timeout}秒内共检测{check_count}次, 帧获取失败{null_frame_count}次")
         return None  # 超时未检测到
     
     def detect_self_once(self):

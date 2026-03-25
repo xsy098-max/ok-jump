@@ -53,6 +53,11 @@ class Phase1Handler:
         # 【新增】移动方向历史记录（用于检测方向抖动）
         self._move_direction_history = []  # 存储最近的移动方向 (dx, dy)
         self._move_direction_max = 6  # 最多记录6个方向
+        
+        # 【新增】敌人位置平滑机制 - 用于解决 YOLO 检测抖动问题
+        self._enemy_position_history = []  # 存储最近的敌人位置 (x, y)
+        self._enemy_position_history_max = 5  # 最多记录5个位置
+        self._enemy_position_jump_threshold = 150  # 位置跳动阈值（像素），超过此值认为是检测异常
     
     def set_verbose(self, verbose: bool):
         """设置详细日志"""
@@ -333,7 +338,24 @@ class Phase1Handler:
         
         if self_pos:
             self._log(f"检测到自身位置: ({self_pos.center_x}, {self_pos.center_y})")
-            self.state_machine.transition_to(TutorialState.TARGET_DETECTION)
+            
+            # 获取角色配置，判断角色类型
+            config = self.character_selector.get_current_config()
+            if config and config.target_type == 'monkey':
+                # 悟空角色：检测到自身后等待10秒，然后向左上移动2.5秒
+                self._log("悟空角色：等待10秒后向左上移动...")
+                time.sleep(10.0)
+                self._log("悟空角色：开始向左上移动2.5秒...")
+                # 使用MovementController确保后台模式兼容
+                # 使用KEY_UP和KEY_LEFT常量确保键名正确
+                self.movement_ctrl._press_movement_keys_for_duration(
+                    [self.movement_ctrl.KEY_UP, self.movement_ctrl.KEY_LEFT], 2.5
+                )
+                self._log("悟空角色：左上移动2.5秒完成，进入普攻按钮检测")
+                self.state_machine.transition_to(TutorialState.NORMAL_ATTACK_DETECTION)
+            else:
+                # 路飞/小鸣人：保持原有流程，进入目标检测
+                self.state_machine.transition_to(TutorialState.TARGET_DETECTION)
         else:
             self._log_error("自身检测超时")
             self._save_error_screenshot("self_detection_failed")
@@ -482,7 +504,12 @@ class Phase1Handler:
     
     def _handle_normal_attack_detection(self):
         """处理普攻按钮检测"""
-        timeout = self._cfg('普攻检测超时(秒)', 10.0)
+        # 获取角色配置，悟空使用更长的超时时间
+        config = self.character_selector.get_current_config()
+        if config and config.target_type == 'monkey':
+            timeout = self._cfg('悟空普攻检测超时(秒)', 40.0)
+        else:
+            timeout = self._cfg('普攻检测超时(秒)', 10.0)
         
         if self.detector.detect_normal_attack_button(timeout):
             self._log("检测到普攻按钮")
@@ -842,10 +869,14 @@ class Phase1Handler:
                             self._locked_enemy = None
                             self._locked_enemy_time = 0
                         
+                        # 【位置平滑】对检测到的敌人位置进行平滑处理
+                        raw_enemy = min(targets, key=lambda e: self.distance_calc.calculate(self_pos, e))
+                        smoothed_x, smoothed_y = self._smooth_enemy_position(raw_enemy)
+                                                
                         # 尝试找到与锁定目标最接近的敌人
                         if self._locked_enemy is not None:
                             locked_x, locked_y = self._locked_enemy
-                            # 寻找距离锁定位置最近的敌人
+                            # 寻找距离锁定位置最近的敌人（使用平滑后的位置）
                             best_match = None
                             min_offset = float('inf')
                             for enemy in targets:
@@ -853,39 +884,44 @@ class Phase1Handler:
                                 if offset < min_offset:
                                     min_offset = offset
                                     best_match = enemy
-                            
-                            # 如果匹配成功（在200像素范围内），使用匹配的目标
-                            if best_match and min_offset < 200:
+                                                    
+                            # 【关键修复】放宽匹配范围到 300px，适应 YOLO 检测抖动
+                            if best_match and min_offset < 300:
+                                # 使用平滑后的位置更新锁定
                                 nearest = best_match
-                                # 更新锁定位置
-                                self._locked_enemy = (nearest.center_x, nearest.center_y)
+                                # 更新锁定位置（使用平滑后的位置）
+                                self._locked_enemy = (smoothed_x, smoothed_y)
                                 self._locked_enemy_time = time.time()
                                 # 每5秒输出一次锁定信息
                                 if loop_count % 100 == 0:
-                                    self._log(f"【目标锁定】保持锁定: ({nearest.center_x},{nearest.center_y}), 偏移:{min_offset:.0f}px")
+                                    self._log(f"【目标锁定】保持锁定: ({smoothed_x},{smoothed_y}), 偏移:{min_offset:.0f}px")
                             else:
-                                # 锁定目标丢失，重新选择最近的
-                                nearest = min(targets, key=lambda e: self.distance_calc.calculate(self_pos, e))
-                                self._locked_enemy = (nearest.center_x, nearest.center_y)
+                                # 锁定目标丢失，使用平滑后的位置
+                                nearest = raw_enemy
+                                self._locked_enemy = (smoothed_x, smoothed_y)
                                 self._locked_enemy_time = time.time()
-                                self._log(f"【目标锁定】重新锁定目标: ({nearest.center_x},{nearest.center_y})")
+                                self._log(f"【目标锁定】重新锁定目标: ({smoothed_x},{smoothed_y})")
                         else:
-                            # 没有锁定目标，获取最近的敌人并锁定
-                            nearest = min(targets, key=lambda e: self.distance_calc.calculate(self_pos, e))
-                            self._locked_enemy = (nearest.center_x, nearest.center_y)
+                            # 没有锁定目标，使用平滑后的位置锁定
+                            nearest = raw_enemy
+                            self._locked_enemy = (smoothed_x, smoothed_y)
                             self._locked_enemy_time = time.time()
-                        
-                        distance = self.distance_calc.calculate(self_pos, nearest)
-                        
+                                                
+                        # 【关键修复】使用平滑后的敌人位置计算距离和方向
+                        distance = self.distance_calc.calculate_from_coords(
+                            self_pos.center_x, self_pos.center_y,
+                            smoothed_x, smoothed_y
+                        )
+                                                
                         # 【调试】输出自身、敌人坐标和距离（包含敌人数量信息）
-                        self._log(f"【战斗】敌人数量:{len(targets)}, 自身:({self_pos.center_x},{self_pos.center_y}), 敌人:({nearest.center_x},{nearest.center_y}), 距离:{distance:.0f}px")
-                        
+                        self._log(f"【战斗】敌人数量:{len(targets)}, 自身:({self_pos.center_x},{self_pos.center_y}), 敌人:({smoothed_x},{smoothed_y}), 距离:{distance:.0f}px")
+                                                
                         # 【关键】保存敌人最后位置（用于 NO_UNITS 时的追踪）
-                        self._last_enemy_pos = (nearest.center_x, nearest.center_y, time.time())
-                        
+                        self._last_enemy_pos = (smoothed_x, smoothed_y, time.time())
+                                                
                         # 【关键修复】更新技能控制器的距离信息
                         skill_ctrl.update_distance(distance)
-                        
+                                                
                         if distance <= 225:
                             # 距离在技能范围内（0-225），启动自动技能
                             self._log(f"【战斗】距离{distance:.0f}px <= 225px，停止移动，开始攻击")
@@ -896,14 +932,14 @@ class Phase1Handler:
                             # 距离超出技能范围，靠近目标
                             self._log(f"【战斗】距离{distance:.0f}px > 225px，靠近敌人")
                             skill_ctrl.stop_auto_skills()
-                            # 【调试】输出移动方向
-                            dx = nearest.center_x - self_pos.center_x
-                            dy = nearest.center_y - self_pos.center_y
-                            self._log(f"【移动方向】dx:{dx:+.0f}, dy:{dy:+.0f}, 目标:({nearest.center_x},{nearest.center_y}), 自身:({self_pos.center_x},{self_pos.center_y})")
-                            
+                            # 【调试】输出移动方向（使用平滑后的位置）
+                            dx = smoothed_x - self_pos.center_x
+                            dy = smoothed_y - self_pos.center_y
+                            self._log(f"【移动方向】dx:{dx:+.0f}, dy:{dy:+.0f}, 目标:({smoothed_x},{smoothed_y}), 自身:({self_pos.center_x},{self_pos.center_y})")
+                                                    
                             # 【方向抖动检测】记录移动方向
                             self._record_move_direction(dx, dy)
-                            
+                                                    
                             # 【方向抖动检测】检测是否方向抖动
                             is_direction_jitter = self._detect_direction_jitter()
                             if is_direction_jitter:
@@ -912,8 +948,9 @@ class Phase1Handler:
                                 self._move_direction_history.clear()  # 清空方向历史
                                 time.sleep(0.1)
                                 continue
-                            
-                            self.movement_ctrl.move_towards(nearest.center_x, nearest.center_y,
+                                                    
+                            # 【关键修复】使用平滑后的位置进行移动
+                            self.movement_ctrl.move_towards(smoothed_x, smoothed_y,
                                                            self_pos.center_x, self_pos.center_y)
                 
                 time.sleep(0.05)  # 主循环间隔
@@ -1168,6 +1205,77 @@ class Phase1Handler:
         
         return is_jitter
     
+    def _smooth_enemy_position(self, enemy):
+        """
+        敌人位置平滑处理 - 解决 YOLO 检测抖动问题
+        
+        策略：
+        1. 记录最近 N 次检测到的敌人位置
+        2. 如果新位置与历史平均值相差太大（超过阈值），认为是检测异常
+        3. 异常情况下，使用历史位置的加权平均
+        4. 即使检测到跳动，也以低权重将新位置加入历史（适应真实移动）
+        
+        Args:
+            enemy: 检测到的敌人对象（DetectionResult）
+            
+        Returns:
+            平滑后的敌人位置对象
+        """
+        current_x = enemy.center_x
+        current_y = enemy.center_y
+        
+        # 如果没有历史记录，直接记录并返回
+        if not self._enemy_position_history:
+            self._enemy_position_history.append((current_x, current_y))
+            return (current_x, current_y)
+        
+        # 计算历史位置的中位数（对异常值更鲁棒）
+        x_coords = sorted([pos[0] for pos in self._enemy_position_history])
+        y_coords = sorted([pos[1] for pos in self._enemy_position_history])
+        n = len(self._enemy_position_history)
+        
+        if n % 2 == 1:
+            median_x = x_coords[n // 2]
+            median_y = y_coords[n // 2]
+        else:
+            median_x = (x_coords[n // 2 - 1] + x_coords[n // 2]) // 2
+            median_y = (y_coords[n // 2 - 1] + y_coords[n // 2]) // 2
+        
+        # 计算当前位置与历史中位数的距离
+        distance_from_median = ((current_x - median_x) ** 2 + (current_y - median_y) ** 2) ** 0.5
+        
+        # 判断是否为位置跳动（异常检测）
+        if distance_from_median > self._enemy_position_jump_threshold:
+            # 检测到位置跳动，输出日志
+            self._log(f"【位置平滑】检测到跳动 {distance_from_median:.0f}px > {self._enemy_position_jump_threshold}px, 中位数: ({median_x},{median_y}) 原位置: ({current_x},{current_y})")
+                    
+            # 【关键修复】仍然将原位置加入历史，让历史记录能够跟踪真实移动
+            # 但返回加权平均位置作为平滑结果
+            self._enemy_position_history.append((current_x, current_y))
+            if len(self._enemy_position_history) > self._enemy_position_history_max:
+                self._enemy_position_history.pop(0)
+                    
+            # 计算加权平均（越近的权重越高）
+            total_weight = 0
+            weighted_x = 0
+            weighted_y = 0
+            for i, (hx, hy) in enumerate(self._enemy_position_history):
+                weight = i + 1  # 越近的权重越高
+                weighted_x += hx * weight
+                weighted_y += hy * weight
+                total_weight += weight
+                    
+            return (int(weighted_x / total_weight), int(weighted_y / total_weight))
+        else:
+            # 位置正常，记录到历史
+            self._enemy_position_history.append((current_x, current_y))
+                    
+            # 保持历史记录在限制范围内
+            if len(self._enemy_position_history) > self._enemy_position_history_max:
+                self._enemy_position_history.pop(0)
+                    
+            return (current_x, current_y)
+    
     def _perform_random_move(self):
         """执行随机移动，用于摆脱抖动"""
         import random
@@ -1195,5 +1303,12 @@ class Phase1Handler:
         
         # 清空位置历史
         self._position_history.clear()
+        
+        # 清空敌人位置历史
+        self._enemy_position_history.clear()
+        
+        # 清空锁定目标
+        if hasattr(self, '_locked_enemy'):
+            self._locked_enemy = None
         
         self._log("第一阶段资源清理完成")

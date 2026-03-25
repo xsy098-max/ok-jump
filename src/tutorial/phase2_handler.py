@@ -11,6 +11,7 @@ import time
 import threading
 from typing import Optional, Tuple
 
+from ok import og
 from src.tutorial.tutorial_detector import TutorialDetector
 from src.constants.features import Features
 
@@ -514,14 +515,79 @@ class Phase2Handler:
                 self._save_error_screenshot("combat_end_timeout")
                 return False
     
+    def _get_combat_config(self, key: str, default=None):
+        """
+        从 AutoCombatTask 配置中读取战斗参数
+        
+        确保新手教程中的自动战斗使用用户在GUI中配置的参数
+        
+        Args:
+            key: 配置键名
+            default: 默认值
+            
+        Returns:
+            配置值
+        """
+        # 优先从全局配置中获取 AutoCombatTask 的配置
+        try:
+            if og and og.config:
+                combat_config = og.config.get('AutoCombatTask', {})
+                if combat_config and key in combat_config:
+                    return combat_config[key]
+        except Exception:
+            pass
+        
+        # 回退：从配置文件直接读取
+        try:
+            import json
+            import os
+            config_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                'configs', 'AutoCombatTask.json'
+            )
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    combat_config = json.load(f)
+                    if key in combat_config:
+                        return combat_config[key]
+        except Exception:
+            pass
+        
+        return default
+    
     def _start_combat_thread(self) -> bool:
         """启动自动战斗线程"""
         try:
             from src.task.AutoCombatTask import AutoCombatTask
             
-            # 直接创建新的任务实例
-            self._combat_task = AutoCombatTask()
+            # 直接创建新的任务实例（参照 phase1_handler.py 的创建方式）
+            self._combat_task = AutoCombatTask(self.task.executor, self.task)
             self._combat_task._exit_requested = False
+            
+            # 【关键修复】手动加载 AutoCombatTask 的配置
+            # 因为手动创建实例时，框架不会自动加载配置文件
+            # 这确保了"移动持续时间(秒)"等配置能正确从配置文件读取
+            if self._combat_task.config is None:
+                self._combat_task.config = {}
+            
+            # 加载所有必要的配置（从配置文件或默认值）
+            config_keys = [
+                '测试模式', '详细日志',
+                '自动普攻', '自动技能1', '自动技能2', '自动大招',
+                '普攻间隔(秒)', '技能1间隔(秒)', '技能2间隔(秒)', '大招间隔(秒)',
+                '移动持续时间(秒)'
+            ]
+            for key in config_keys:
+                # 从配置文件读取，如果不存在则使用 default_config
+                default_value = self._combat_task.default_config.get(key)
+                self._combat_task.config[key] = self._get_combat_config(key, default_value)
+            
+            # 设置测试模式（跳过游戏场景检测）
+            self._combat_task.config['测试模式'] = True
+            
+            # 记录当前配置（用于调试）
+            move_duration = self._combat_task.config.get('移动持续时间(秒)', 0.5)
+            self._log(f"已启用测试模式，移动持续时间: {move_duration}秒")
             
             # 在独立线程中运行
             self._combat_thread = threading.Thread(
@@ -685,9 +751,14 @@ class Phase2Handler:
         else:
             self._log("未检测到中间加载界面，直接进行第二次检测...")
         
-        # 第二次 MVP 点击
+        # 第二次 MVP 点击（使用不同的文字：点击荧幕继续 / 點擊螢幕繼續，模板: out2.png）
         self._log("检测第二次MVP场景...")
-        if not self._detect_and_click_mvp(timeout=mvp_timeout):
+        if not self._detect_and_click_mvp(
+            timeout=mvp_timeout,
+            simplified_text="点击荧幕继续",
+            traditional_text="點擊螢幕繼續",
+            feature_name=Features.TUTORIAL_MVP_OUT2
+        ):
             self._log_error("第二次MVP点击失败")
             self._save_error_screenshot("mvp_second_click_failed")
             return False
@@ -695,32 +766,52 @@ class Phase2Handler:
         self._log("第二次MVP点击成功，MVP场景处理完成")
         return True
     
-    def _detect_and_click_mvp(self, timeout: float) -> bool:
+    def _detect_and_click_mvp(self, timeout: float, 
+                                simplified_text: str = "点击荧幕退出", 
+                                traditional_text: str = "點擊螢幕退出",
+                                feature_name: str = None) -> bool:
         """
         检测并点击MVP场景
         
-        主检测：模板匹配 out.png
-        备选检测：OCR 识别"点击荧幕退出"（简繁双语）
+        主检测：模板匹配指定的特征图片
+        备选检测：OCR 识别指定文字（简繁双语）
         
         Args:
             timeout: 超时时间
+            simplified_text: 简体中文检测文字
+            traditional_text: 繁体中文检测文字
+            feature_name: 模板特征名，默认使用 Features.TUTORIAL_MVP_OUT
             
         Returns:
             bool: 是否成功
         """
+        # 默认使用第一次 MVP 的模板
+        if feature_name is None:
+            feature_name = Features.TUTORIAL_MVP_OUT
         start_time = time.time()
+        check_count = 0
+        last_progress_log_time = start_time
+        ocr_logged_once = False  # 控制OCR诊断日志只输出一次
         
         while time.time() - start_time < timeout:
             if self._should_exit():
                 return False
             
+            check_count += 1
+            
+            # 每5秒输出一次检测进度
+            now = time.time()
+            if now - last_progress_log_time >= 5:
+                self._log(f"MVP检测进行中: 已检测{check_count}次, 耗时{now - start_time:.1f}秒")
+                last_progress_log_time = now
+            
             self.task.next_frame()
             
             # 方法1: 模板匹配
             try:
-                mvp_btn = self.task.find_one(Features.TUTORIAL_MVP_OUT, threshold=0.6)
+                mvp_btn = self.task.find_one(feature_name, threshold=0.6)
                 if mvp_btn:
-                    self._log(f"[模板匹配] 检测到MVP退出提示: ({mvp_btn.x}, {mvp_btn.y})")
+                    self._log(f"[模板匹配] 检测到MVP退出提示: ({mvp_btn.x}, {mvp_btn.y}), 模板: {feature_name}")
                     # 点击屏幕中心
                     center_x = self.task.width // 2
                     center_y = self.task.height // 2
@@ -730,19 +821,33 @@ class Phase2Handler:
             except (ValueError, Exception):
                 pass
             
-            # 方法2: OCR检测"点击荧幕退出"（简繁双语）
-            pos = self._detect_text_bilingual("点击荧幕退出", "點擊熒幕退出")
+            # 方法2: OCR检测指定文字（简繁双语）
+            pos = self._detect_text_bilingual(simplified_text, traditional_text)
             if pos:
-                self._log(f"[OCR] 检测到点击荧幕退出文字: {pos}")
+                self._log(f"[OCR] 检测到'{simplified_text}'文字: {pos}")
                 # 点击屏幕中心
                 center_x = self.task.width // 2
                 center_y = self.task.height // 2
                 self._log(f"点击屏幕中心: ({center_x}, {center_y})")
                 self.task.click(center_x, center_y, after_sleep=1.0)
                 return True
+            else:
+                # OCR诊断日志（只输出一次）
+                if not ocr_logged_once:
+                    try:
+                        texts = self.task.ocr()
+                        if texts:
+                            text_names = [t.name for t in texts]
+                            self._log(f"[OCR诊断] 首次OCR识别结果: {text_names}")
+                            self._log(f"[OCR诊断] 目标文字: '{simplified_text}' / '{traditional_text}'")
+                            ocr_logged_once = True
+                    except Exception as e:
+                        self._log(f"[OCR诊断] OCR检测异常: {e}")
             
             time.sleep(0.2)
         
+        # 超时总结日志
+        self._log_error(f"MVP检测超时: {timeout}秒内共检测{check_count}次均未匹配")
         return False
     
     # ==================== 步骤 2.7: 新英雄场景处理 ====================
@@ -931,9 +1036,33 @@ class Phase2Handler:
             return True
         return False
     
+    def _extract_keywords(self, text: str) -> list:
+        """
+        从文字中提取关键词（用于分字容错匹配）
+        
+        取文字的后4个字符，分为两组关键词（每组2个字）
+        例如："点击荧幕退出" -> ["荧幕", "退出"]
+              "點擊熒幕繼續" -> ["熒幕", "繼續"]
+        
+        Args:
+            text: 原始文字
+            
+        Returns:
+            关键词列表
+        """
+        if len(text) < 4:
+            return [text]
+        # 取后4个字符，分为两组
+        last4 = text[-4:]
+        return [last4[:2], last4[2:]]
+    
     def _detect_text_bilingual(self, simplified: str, traditional: str) -> Optional[Tuple[int, int]]:
         """
         检测文字（简繁双语）
+        
+        检测方式：
+        1. 正则全文匹配（优先）
+        2. 分字容错匹配（后备）- 检查关键词是否都出现在OCR结果中
         
         Args:
             simplified: 简体中文文字
@@ -947,14 +1076,37 @@ class Phase2Handler:
             if not texts:
                 return None
             
-            pattern = re.compile(f"{simplified}|{traditional}")
+            # 方法1: 正则全文匹配
+            pattern = re.compile(f"{re.escape(simplified)}|{re.escape(traditional)}")
             matched = self.task.find_boxes(texts, match=pattern)
             
             if matched:
                 t = matched[0]
                 return (t.x + t.width // 2, t.y + t.height // 2)
-        except Exception:
-            pass
+            
+            # 方法2: 分字容错匹配
+            # 将所有 OCR 文字拼接成一个字符串
+            all_text = ''.join([t.name for t in texts])
+            
+            # 提取关键词对（简体+繁体）进行检查
+            simplified_keywords = self._extract_keywords(simplified)
+            traditional_keywords = self._extract_keywords(traditional)
+            
+            # 简体关键词全部命中 或 繁体关键词全部命中
+            simplified_match = all(kw in all_text for kw in simplified_keywords)
+            traditional_match = all(kw in all_text for kw in traditional_keywords)
+            
+            if simplified_match or traditional_match:
+                # 返回屏幕中心坐标（因为分字匹配无法确定精确位置）
+                frame = self.task.frame
+                if frame is not None:
+                    h, w = frame.shape[:2]
+                    center = (w // 2, h // 2)
+                    matched_kws = simplified_keywords if simplified_match else traditional_keywords
+                    self._log(f"[OCR分字匹配] 检测到关键词{matched_kws}, 返回屏幕中心: {center}")
+                    return center
+        except Exception as e:
+            self._log(f"[OCR] 检测异常: {e}")
         
         return None
     

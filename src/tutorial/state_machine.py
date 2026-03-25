@@ -68,7 +68,7 @@ class TutorialStateMachine:
         TutorialState.CONFIRM_DIALOG: [TutorialState.SECOND_CLICK, TutorialState.FAILED],
         TutorialState.SECOND_CLICK: [TutorialState.LOADING, TutorialState.FAILED],
         TutorialState.LOADING: [TutorialState.SELF_DETECTION, TutorialState.FAILED],
-        TutorialState.SELF_DETECTION: [TutorialState.TARGET_DETECTION, TutorialState.FAILED],
+        TutorialState.SELF_DETECTION: [TutorialState.TARGET_DETECTION, TutorialState.NORMAL_ATTACK_DETECTION, TutorialState.FAILED],
         TutorialState.TARGET_DETECTION: [TutorialState.MOVE_TO_TARGET, TutorialState.FAILED],
         TutorialState.MOVE_TO_TARGET: [TutorialState.NORMAL_ATTACK_DETECTION, TutorialState.FAILED],
         TutorialState.NORMAL_ATTACK_DETECTION: [TutorialState.MOVE_DOWN, TutorialState.FAILED],

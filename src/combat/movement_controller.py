@@ -562,7 +562,7 @@ class MovementController:
         """
         手机端向目标移动（虚拟摇杆）
         
-        直接将摇杆滑动到敌人坐标对应的位置（而非方向）
+        【修复】直接向目标方向全速移动，而不是根据目标在屏幕上的位置来调整速度
         """
         cx, cy = self._get_joystick_center_px()
         if cx is None:
@@ -571,30 +571,42 @@ class MovementController:
         # 获取适配后的摇杆半径
         radius = self._get_joystick_radius_px()
 
-        # 计算目标相对于屏幕中心的位置，映射到摇杆范围内
-        # 获取屏幕尺寸
+        # 获取屏幕尺寸和屏幕中心（自身位置始终在屏幕中心）
         frame = self.task.frame
         screen_w = frame.shape[1]
         screen_h = frame.shape[0]
+        screen_center_x = screen_w / 2
+        screen_center_y = screen_h / 2
         
-        # 计算目标相对于屏幕中心的比例（-1到1）
-        dx_ratio = (target_x - screen_w / 2) / (screen_w / 2)
-        dy_ratio = (target_y - screen_h / 2) / (screen_h / 2)
+        # 【关键修复】计算从自身到目标的方向，并全速移动
+        # dx, dy 是目标相对于自身（屏幕中心）的方向向量
+        dx = target_x - screen_center_x
+        dy = target_y - screen_center_y
         
-        # 将比例映射到摇杆半径范围内
-        dx = dx_ratio * radius
-        dy = dy_ratio * radius
+        # 计算方向长度
+        length = math.sqrt(dx * dx + dy * dy)
         
-        # 限制在摇杆范围内
-        distance = math.sqrt(dx * dx + dy * dy)
-        if distance > radius:
-            dx = dx / distance * radius
-            dy = dy / distance * radius
+        if length < 1:
+            # 目标就在自身位置，不需要移动
+            return
+        
+        
+        # 【关键修复】归一化方向向量，然后乘以摇杆半径
+        # 这样无论目标在哪里，都是全速移动
+        dx_normalized = dx / length
+        dy_normalized = dy / length
+        
+        # 摇杆偏移 = 方向 * 半径（全速）
+        joystick_dx = dx_normalized * radius
+        joystick_dy = dy_normalized * radius
 
         # 执行滑动（使用配置的移动持续时间）
-        end_x = int(cx + dx)
-        end_y = int(cy + dy)
-        self.task.logger.info(f"[ADB移动] 摇杆中心:({cx},{cy}), 半径:{radius}, 目标:({target_x},{target_y}), 映射:({end_x},{end_y}), 比例:({dx_ratio:.2f},{dy_ratio:.2f})")
+        end_x = int(cx + joystick_dx)
+        end_y = int(cy + joystick_dy)
+        
+        # 计算角度用于日志
+        angle = math.degrees(math.atan2(dy_normalized, dx_normalized))
+        self.task.logger.info(f"[ADB移动] 摇杆中心:({cx},{cy}), 半径:{radius}, 目标:({target_x},{target_y}), 方向角:{angle:.0f}°, 映射:({end_x},{end_y}), 全速移动")
         self.task.swipe(cx, cy, end_x, end_y, duration=self.move_duration)
 
     def _move_adb_away(self, target_x, target_y):

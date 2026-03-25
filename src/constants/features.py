@@ -88,7 +88,8 @@ class Features:
     TUTORIAL_END02 = 'tutorial_end02'                   # 开始对战按钮
     TUTORIAL_FIGHT_START = 'fight_start'                # 战斗开始标志
     TUTORIAL_FIGHT_END = 'fight_end'                    # 战斗结束标志
-    TUTORIAL_MVP_OUT = 'out'                            # MVP场景退出按钮
+    TUTORIAL_MVP_OUT = 'out'                            # MVP场景退出按钮（第一次）
+    TUTORIAL_MVP_OUT2 = 'out2'                          # MVP场景退出按钮（第二次）
     TUTORIAL_NEW_HERO = 'new_hero'                      # 新英雄场景标志
 
 
