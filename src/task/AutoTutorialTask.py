@@ -175,8 +175,11 @@ class AutoTutorialTask(BaseJumpTask):
         
         # 标记全局教程完成状态（延迟导入避免循环导入）
         from src import jump_globals
-        jump_globals.set_tutorial_completed(True)
-        self.logger.info("新手引导全局完成状态已标记")
+        if jump_globals is not None:
+            jump_globals.set_tutorial_completed(True)
+            self.logger.info("新手引导全局完成状态已标记")
+        else:
+            self.logger.info("jump_globals 未初始化，跳过全局状态标记")
         
         # 清理资源
         self._phase2_handler.cleanup()

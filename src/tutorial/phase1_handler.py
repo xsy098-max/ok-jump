@@ -43,7 +43,7 @@ class Phase1Handler:
         
         # 【抖动检测】坐标历史记录，用于检测 A→B→A→B 模式
         self._position_history = []  # 存储最近的位置 (x, y)
-        self._position_history_max = 6  # 最多记录6个位置
+        self._position_history_max = 4  # 最多记录4个位置（与卡住检测次数一致）
         
         # 抖动检测调试统计
         self._jitter_check_count = 0  # 抖动检测次数统计
@@ -761,10 +761,10 @@ class Phase1Handler:
                 # 【抖动检测】记录当前位置
                 self._record_position(self_pos.center_x, self_pos.center_y)
                 
-                # 【卡住检测】检测是否连续6次在同一坐标（角色被卡住）
+                # 【卡住检测】检测是否连续4次在同一坐标（角色被卡住）
                 is_stuck = self._detect_stuck()
                 if is_stuck:
-                    self._log("【卡住检测】连续6次检测到相同坐标，角色可能被卡住，向下移动1秒")
+                    self._log("【卡住检测】连续4次检测到相同坐标，角色可能被卡住，向下移动1秒")
                     self.movement_ctrl._press_movement_keys_for_duration(['S'], 1.0)
                     # 清空位置历史，重新检测
                     self._position_history.clear()
@@ -907,30 +907,28 @@ class Phase1Handler:
                             self._locked_enemy = (smoothed_x, smoothed_y)
                             self._locked_enemy_time = time.time()
                                                 
-                        # 【关键修复】使用平滑后的敌人位置计算距离和方向
-                        distance = self.distance_calc.calculate_from_coords(
-                            self_pos.center_x, self_pos.center_y,
-                            smoothed_x, smoothed_y
-                        )
-                                                
+                        # 【关键修复】检测所有敌人的距离
+                        # 如果有一个敌人在范围内，就启动技能
+                        skill_distance, any_in_range = self._get_skill_distance_all_enemies(self_pos, targets)
+                        
                         # 【调试】输出自身、敌人坐标和距离（包含敌人数量信息）
-                        self._log(f"【战斗】敌人数量:{len(targets)}, 自身:({self_pos.center_x},{self_pos.center_y}), 敌人:({smoothed_x},{smoothed_y}), 距离:{distance:.0f}px")
+                        self._log(f"【战斗】敌人数量:{len(targets)}, 自身:({self_pos.center_x},{self_pos.center_y}), 最近敌人距离:{skill_distance:.0f}px, 有敌人在范围内:{any_in_range}")
                                                 
                         # 【关键】保存敌人最后位置（用于 NO_UNITS 时的追踪）
                         self._last_enemy_pos = (smoothed_x, smoothed_y, time.time())
                                                 
                         # 【关键修复】更新技能控制器的距离信息
-                        skill_ctrl.update_distance(distance)
+                        skill_ctrl.update_distance(skill_distance)
                                                 
-                        if distance <= 225:
-                            # 距离在技能范围内（0-225），启动自动技能
-                            self._log(f"【战斗】距离{distance:.0f}px <= 225px，停止移动，开始攻击")
+                        if any_in_range:
+                            # 有敌人在技能范围内，启动自动技能
+                            self._log(f"【战斗】检测到敌人在范围内({skill_distance:.0f}px <= 225px)，停止移动，开始攻击")
                             skill_ctrl.start_auto_skills()
                             skill_ctrl.update()
                             self.movement_ctrl.stop()
                         else:
-                            # 距离超出技能范围，靠近目标
-                            self._log(f"【战斗】距离{distance:.0f}px > 225px，靠近敌人")
+                            # 所有敌人都超出技能范围，靠近最近的目标
+                            self._log(f"【战斗】所有敌人超出范围，最近距离{skill_distance:.0f}px > 225px，靠近敌人")
                             skill_ctrl.stop_auto_skills()
                             # 【调试】输出移动方向（使用平滑后的位置）
                             dx = smoothed_x - self_pos.center_x
@@ -1017,31 +1015,18 @@ class Phase1Handler:
     
     def _record_position(self, x: int, y: int):
         """
-        记录位置历史，用于检测抖动
+        记录位置历史，用于检测抖动和卡住
         
         检测逻辑：
-        - 如果当前位置与最后一个记录的位置距离 < 阈值：视为同一位置，不记录
-        - 如果当前位置与最后一个记录的位置距离 >= 阈值：视为新位置，记录
-        
+        - 无论位置是否变化，都记录到历史中（用于检测卡住）
+        - 抖动检测会区分位置是否真正变化
+
         Args:
             x, y: 当前坐标
         """
-        # 使用坐标阈值，相近的坐标视为同一点（10px内视为同一点）
-        COORD_THRESHOLD = 10  # 10像素内的坐标视为同一点
-        
-        # 检查是否与最后一个记录的位置相近
-        if self._position_history:
-            last_x, last_y = self._position_history[-1]
-            distance = ((x - last_x) ** 2 + (y - last_y) ** 2) ** 0.5
-            if distance < COORD_THRESHOLD:
-                # 位置相近，不记录（说明还在同一个区域）
-                self._skipped_record_count += 1
-                return
-        
-        # 位置与上一个记录的距离 >= 阈值，说明进入了新区域，记录
+        # 直接记录当前位置（不再跳过相近的位置，以便卡住检测能正常工作）
         self._position_history.append((x, y))
         self._last_recorded_pos = (x, y)
-        self._skipped_record_count = 0
         
         # 保持历史记录在限制范围内
         if len(self._position_history) > self._position_history_max:
@@ -1125,17 +1110,17 @@ class Phase1Handler:
     
     def _detect_stuck(self) -> bool:
         """
-        检测角色是否被卡住（连续6次检测到相同坐标）
+        检测角色是否被卡住（连续4次检测到相同坐标）
         
         检测逻辑：
-        - 如果最近6个位置都在10像素范围内，认为角色被卡住
+        - 如果最近4个位置都在10像素范围内，认为角色被卡住
         - 每次触发后清空历史，允许再次检测
         
         Returns:
             bool: 如果检测到卡住返回 True
         """
         STUCK_THRESHOLD = 10  # 10像素内视为同一位置
-        STUCK_COUNT = 6  # 连续6次
+        STUCK_COUNT = 4  # 连续4次
         
         if len(self._position_history) < STUCK_COUNT:
             return False
@@ -1293,6 +1278,49 @@ class Phase1Handler:
         
         self._log(f"【抖动检测】随机移动方向: {'+'.join(keys)}, 持续2秒 (权重随机)")
         self.movement_ctrl._press_movement_keys_for_duration(keys, 2.0)
+    
+    def _get_skill_distance_all_enemies(self, self_pos, enemies):
+        """
+        获取技能释放距离（检测所有敌人）
+        
+        逻辑：
+        1. 如果有任何一个敌人在技能范围内(0-225px)，返回该距离（优先）
+        2. 否则返回最近敌人的距离
+        
+        Args:
+            self_pos: 自身位置
+            enemies: 敌人列表
+            
+        Returns:
+            tuple: (distance, in_range) 距离和是否在范围内
+        """
+        if not enemies or self_pos is None:
+            return (float('inf'), False)
+        
+        # 技能范围
+        SKILL_RANGE_MIN = 0
+        SKILL_RANGE_MAX = 225
+        
+        nearest_distance = float('inf')
+        in_range_distance = None
+        
+        for enemy in enemies:
+            distance = self.distance_calc.calculate(self_pos, enemy)
+            
+            # 更新最近距离
+            if distance < nearest_distance:
+                nearest_distance = distance
+            
+            # 检查是否在技能范围内
+            if SKILL_RANGE_MIN <= distance <= SKILL_RANGE_MAX:
+                if in_range_distance is None or distance < in_range_distance:
+                    in_range_distance = distance
+        
+        
+        # 优先返回范围内的距离，否则返回最近距离
+        if in_range_distance is not None:
+            return (in_range_distance, True)
+        return (nearest_distance, False)
     
     def cleanup(self):
         """清理资源"""

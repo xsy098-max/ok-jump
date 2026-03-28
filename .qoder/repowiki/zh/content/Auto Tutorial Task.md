@@ -5,25 +5,16 @@
 - [AutoTutorialTask.py](file://src/task/AutoTutorialTask.py)
 - [AutoTutorialTask.json](file://configs/AutoTutorialTask.json)
 - [state_machine.py](file://src/tutorial/state_machine.py)
-- [tutorial_detector.py](file://src/tutorial/tutorial_detector.py)
 - [character_selector.py](file://src/tutorial/character_selector.py)
 - [phase1_handler.py](file://src/tutorial/phase1_handler.py)
 - [phase2_handler.py](file://src/tutorial/phase2_handler.py)
 - [state_detector.py](file://src/combat/state_detector.py)
-- [skill_controller.py](file://src/combat/skill_controller.py)
-- [movement_controller.py](file://src/combat/movement_controller.py)
-- [features.py](file://src/constants/features.py)
-- [labels.py](file://src/combat/labels.py)
-- [BackgroundManager.py](file://src/utils/BackgroundManager.py)
-- [BaseJumpTask.py](file://src/task/BaseJumpTask.py)
 - [globals.py](file://src/globals.py)
-- [README.md](file://README.md)
-- [自动战斗系统流程图.md](file://docs/自动战斗系统流程图.md)
 </cite>
 
 ## 更新摘要
 **所做更改**
-- 更新默认角色配置，从'小鸣人'变更为'路飞'
+- 更新默认角色配置，从'路飞'变更为'悟空'
 - 增强教程系统的稳定性，包括改进的错误处理和战斗检测能力
 - 新增全局教程完成状态标记机制
 - 更新详细组件分析，包含两阶段处理流程
@@ -44,7 +35,7 @@
 
 自动教程任务是基于 `ok-script` 框架构建的《漫画群星：大集结》自动化工具的核心功能之一。该项目旨在通过图像识别、OCR 和自动化脚本技术，实现游戏新手教程流程的完全自动化。
 
-**更新** 系统现已支持两阶段协调执行架构，包括第一阶段的新手教程流程和第二阶段的战斗流程。系统采用双处理器架构，第一阶段处理教程流程，第二阶段处理战斗和后续场景，同时引入全局教程完成状态标记机制，确保任务间的协调执行。默认角色已从'小鸣人'变更为'路飞'，提供更好的教程体验。
+**更新** 系统现已支持两阶段协调执行架构，包括第一阶段的新手教程流程和第二阶段的战斗流程。系统采用双处理器架构，第一阶段处理教程流程，第二阶段处理战斗和后续场景，同时引入全局教程完成状态标记机制，确保任务间的协调执行。默认角色已从'路飞'变更为'悟空'，提供更好的教程体验。
 
 ## 项目结构
 
@@ -84,7 +75,7 @@ I --> R
 **图表来源**
 - [AutoTutorialTask.py:1-293](file://src/task/AutoTutorialTask.py#L1-L293)
 - [state_machine.py:1-209](file://src/tutorial/state_machine.py#L1-L209)
-- [phase1_handler.py:1-1200](file://src/tutorial/phase1_handler.py#L1-L1200)
+- [phase1_handler.py:1-1315](file://src/tutorial/phase1_handler.py#L1-L1315)
 - [phase2_handler.py:1-851](file://src/tutorial/phase2_handler.py#L1-L851)
 
 **章节来源**
@@ -100,7 +91,7 @@ AutoTutorialTask 是整个教程系统的核心控制器，负责协调第一阶
 **主要功能特性：**
 - **更新** 两阶段协调执行架构，支持第一阶段教程和第二阶段战斗
 - 多角色选择支持（悟空、路飞、小鸣人、全部）
-- **更新** 配置驱动的参数管理，默认角色为路飞
+- **更新** 配置驱动的参数管理，默认角色为悟空
 - 详细的日志记录和错误处理
 - 后台模式兼容性
 - **新增** 全局教程完成状态标记机制
@@ -148,7 +139,7 @@ AutoTutorialTask 是整个教程系统的核心控制器，负责协调第一阶
 **章节来源**
 - [AutoTutorialTask.py:28-293](file://src/task/AutoTutorialTask.py#L28-L293)
 - [state_machine.py:10-209](file://src/tutorial/state_machine.py#L10-L209)
-- [tutorial_detector.py:21-806](file://src/tutorial/tutorial_detector.py#L21-L806)
+- [character_selector.py:12-232](file://src/tutorial/character_selector.py#L12-L232)
 
 ## 架构概览
 
@@ -195,9 +186,8 @@ A --> M
 ```
 
 **图表来源**
-- [phase1_handler.py:21-1200](file://src/tutorial/phase1_handler.py#L21-L1200)
+- [phase1_handler.py:21-1315](file://src/tutorial/phase1_handler.py#L21-L1315)
 - [phase2_handler.py:21-851](file://src/tutorial/phase2_handler.py#L21-L851)
-- [tutorial_detector.py:21-806](file://src/tutorial/tutorial_detector.py#L21-L806)
 - [state_detector.py:24-473](file://src/combat/state_detector.py#L24-L473)
 
 ## 详细组件分析
@@ -285,11 +275,10 @@ Handler->>StateMachine : transition_to(PHASE1_END)
 ```
 
 **图表来源**
-- [phase1_handler.py:103-1200](file://src/tutorial/phase1_handler.py#L103-L1200)
-- [tutorial_detector.py:66-806](file://src/tutorial/tutorial_detector.py#L66-L806)
+- [phase1_handler.py:103-1315](file://src/tutorial/phase1_handler.py#L103-L1315)
 
 **章节来源**
-- [phase1_handler.py:21-1200](file://src/tutorial/phase1_handler.py#L21-L1200)
+- [phase1_handler.py:21-1315](file://src/tutorial/phase1_handler.py#L21-L1315)
 
 ### 第二阶段处理器
 
@@ -400,74 +389,11 @@ NewHero --> Result
 ```
 
 **图表来源**
-- [tutorial_detector.py:66-806](file://src/tutorial/tutorial_detector.py#L66-L806)
-- [features.py:9-93](file://src/constants/features.py#L9-L93)
+- [character_selector.py:77-99](file://src/tutorial/character_selector.py#L77-L99)
+- [character_selector.py:104-130](file://src/tutorial/character_selector.py#L104-L130)
 
 **章节来源**
-- [tutorial_detector.py:21-806](file://src/tutorial/tutorial_detector.py#L21-L806)
-
-### 自动战斗集成
-
-教程系统与自动战斗模块深度集成，实现了教程结束后的无缝战斗体验。
-
-```mermaid
-classDiagram
-class Phase1Handler {
-+StateDetector state_detector
-+SkillController skill_controller
-+MovementController movement_controller
-+start_phase1_end_detection(timeout) void
-+is_phase1_end_detected() bool
-+_handle_combat_trigger() void
-}
-class Phase2Handler {
-+StateDetector state_detector
-+SkillController skill_controller
-+MovementController movement_controller
-+run() bool
-+_run_combat_with_end_detection() bool
-+_end_detection_loop(timeout) void
-+_handle_mvp_scene() bool
-+_handle_new_hero_scene() bool
-+_verify_main_interface() bool
-}
-class StateDetector {
-+start_death_monitor() void
-+detect_self(timeout) DetectionResult
-+get_battlefield_state_detailed() tuple
-+is_death_detected() bool
-}
-class SkillController {
-+start_auto_skills() void
-+stop_auto_skills() void
-+update_distance(distance) void
-+can_use(skill) bool
-}
-class MovementController {
-+move_towards(target_x,target_y,self_x,self_y) void
-+stop() void
-+set_move_duration(duration) void
-}
-Phase1Handler --> StateDetector : "使用"
-Phase1Handler --> SkillController : "集成"
-Phase1Handler --> MovementController : "控制"
-Phase2Handler --> StateDetector : "使用"
-Phase2Handler --> SkillController : "集成"
-Phase2Handler --> MovementController : "控制"
-StateDetector --> SkillController : "配合"
-StateDetector --> MovementController : "配合"
-```
-
-**图表来源**
-- [phase1_handler.py:611-1200](file://src/tutorial/phase1_handler.py#L611-L1200)
-- [phase2_handler.py:329-851](file://src/tutorial/phase2_handler.py#L329-L851)
-- [state_detector.py:24-473](file://src/combat/state_detector.py#L24-L473)
-- [skill_controller.py:82-593](file://src/combat/skill_controller.py#L82-L593)
-
-**章节来源**
-- [phase1_handler.py:611-1200](file://src/tutorial/phase1_handler.py#L611-L1200)
-- [phase2_handler.py:329-851](file://src/tutorial/phase2_handler.py#L329-L851)
-- [state_detector.py:24-473](file://src/combat/state_detector.py#L24-L473)
+- [character_selector.py:12-232](file://src/tutorial/character_selector.py#L12-L232)
 
 ### 全局状态管理
 
@@ -646,7 +572,7 @@ M --> K
 - 第一阶段：完整的教程流程处理
 - 第二阶段：战斗流程和后续场景处理
 - 全局状态管理：教程完成状态的统一标记和查询
-- **更新** 默认角色配置：从'小鸣人'变更为'路飞'
+- **更新** 默认角色配置：从'路飞'变更为'悟空'
 
 **未来发展方向：**
 - 增加更多角色支持

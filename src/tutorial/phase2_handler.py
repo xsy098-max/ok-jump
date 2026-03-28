@@ -470,16 +470,26 @@ class Phase2Handler:
         """
         运行自动战斗，同时并行检测战斗结束
         
+        如果GUI中已开启自动战斗，则跳过启动战斗线程，只进行战斗结束检测
+        
         Returns:
             bool: 是否成功
         """
+        from src.task.AutoCombatTask import AutoCombatTask
+        
         combat_timeout = self._cfg('第二阶段战斗超时(秒)', 210.0)
+        gui_combat_running = AutoCombatTask.is_running()
         
-        self._log(f"启动自动战斗（超时: {combat_timeout}秒）...")
-        
-        # 启动自动战斗线程
-        if not self._start_combat_thread():
-            return False
+        if gui_combat_running:
+            self._log("检测到GUI自动战斗已运行，跳过启动战斗线程")
+            self._log("将使用GUI的自动战斗，仅进行战斗结束检测")
+            # 不启动自己的战斗线程，直接进行结束检测
+            self._combat_task = AutoCombatTask.get_running_instance()
+        else:
+            self._log(f"启动自动战斗线程（超时: {combat_timeout}秒）...")
+            # 启动自动战斗线程
+            if not self._start_combat_thread():
+                return False
         
         # 启动结束检测线程
         self._start_end_detection_thread(combat_timeout)
@@ -497,9 +507,12 @@ class Phase2Handler:
             
             time.sleep(0.5)
         
-        # 停止战斗和检测
+        # 停止检测
         self._stop_end_detection()
-        self._stop_combat()
+        
+        # 只有当不是GUI自动战斗时才停止战斗线程
+        if not gui_combat_running:
+            self._stop_combat()
         
         with self._combat_end_lock:
             if self._combat_end_detected:
@@ -614,6 +627,12 @@ class Phase2Handler:
     
     def _stop_combat(self):
         """停止自动战斗"""
+        # 检查是否是自己启动的战斗线程
+        # 如果 _combat_thread 为 None，说明使用的是GUI的自动战斗，不应该停止
+        if not self._combat_thread:
+            self._log("使用GUI自动战斗，不停止外部战斗任务")
+            return
+        
         if self._combat_task:
             self._log("停止自动战斗...")
             self._combat_task._exit_requested = True
@@ -934,6 +953,9 @@ class Phase2Handler:
         """
         等待最终加载界面
         
+        容错机制：如果在等待过程中检测到主界面元素（漫斗赛/排位赛），
+        则跳过加载等待，直接返回成功
+        
         Returns:
             bool: 是否成功
         """
@@ -946,14 +968,61 @@ class Phase2Handler:
         # 短暂等待，让加载界面出现
         time.sleep(2.0)
         
-        # 检测加载开始
-        if self.detector.detect_loading_start(timeout=15.0):
+        # 检测加载开始（带主界面并行检测）
+        start_time = time.time()
+        loading_started = False
+        
+        while time.time() - start_time < 15.0:
+            if self._should_exit():
+                return False
+            
+            self.task.next_frame()
+            
+            # 容错：检测主界面元素
+            if self._quick_check_main_interface():
+                self._log("[容错] 检测到主界面元素，跳过最终加载界面等待")
+                return True
+            
+            # 检测加载开始
+            if self.detector.detect_loading_start(timeout=1.0):
+                loading_started = True
+                break
+            
+            time.sleep(0.2)
+        
+        
+        if loading_started:
             self._log("最终加载界面开始...")
-            if not self.detector.detect_loading_end(timeout=final_loading_timeout, stuck_timeout=60.0):
+            
+            # 等待加载结束（带主界面并行检测）
+            loading_end_start = time.time()
+            while time.time() - loading_end_start < final_loading_timeout:
+                if self._should_exit():
+                    return False
+                
+                self.task.next_frame()
+                
+                # 容错：检测主界面元素
+                if self._quick_check_main_interface():
+                    self._log("[容错] 检测到主界面元素，跳过剩余加载等待")
+                    return True
+                
+                # 检测加载结束
+                if self.detector.detect_loading_end(timeout=5.0, stuck_timeout=60.0):
+                    self._log("最终加载界面结束")
+                    break
+                
+                time.sleep(0.3)
+            else:
+                # 超时，最后检查一次主界面
+                self.task.next_frame()
+                if self._quick_check_main_interface():
+                    self._log("[容错] 超时后检测到主界面元素，继续流程")
+                    return True
+                
                 self._log_error("最终加载界面超时")
                 self._save_error_screenshot("final_loading_timeout")
                 return False
-            self._log("最终加载界面结束")
         else:
             self._log("未检测到最终加载界面，可能已加载完成")
         
@@ -962,6 +1031,38 @@ class Phase2Handler:
         time.sleep(buffer_time)
         
         return True
+    
+    def _quick_check_main_interface(self) -> bool:
+        """
+        快速检测主界面元素（漫斗赛/排位赛）
+        
+        Returns:
+            bool: 是否检测到主界面
+        """
+        try:
+            texts = self.task.ocr()
+            if not texts:
+                return False
+            
+            # 检测"漫斗赛"或"排位赛"（简繁双语）
+            mandou_pattern = re.compile(r"漫斗赛|漫鬥賽")
+            paiwei_pattern = re.compile(r"排位赛|排位賽")
+            
+            mandou_matched = self.task.find_boxes(texts, match=mandou_pattern)
+            paiwei_matched = self.task.find_boxes(texts, match=paiwei_pattern)
+            
+            if mandou_matched or paiwei_matched:
+                matched_texts = []
+                if mandou_matched:
+                    matched_texts.append(f"漫斗赛:{mandou_matched[0].name}")
+                if paiwei_matched:
+                    matched_texts.append(f"排位赛:{paiwei_matched[0].name}")
+                self._log(f"[主界面检测] 检测到: {', '.join(matched_texts)}")
+                return True
+        except Exception as e:
+            pass
+        
+        return False
     
     # ==================== 步骤 2.9: 主界面验证 ====================
     
@@ -983,11 +1084,13 @@ class Phase2Handler:
             self._log(f"主界面验证尝试 {retry + 1}/{max_retry}")
             
             start_time = time.time()
+            check_count = 0
             while time.time() - start_time < main_timeout:
                 if self._should_exit():
                     return False
                 
                 self.task.next_frame()
+                check_count += 1
                 
                 # OCR检测
                 texts = self.task.ocr()
@@ -995,19 +1098,26 @@ class Phase2Handler:
                     time.sleep(0.3)
                     continue
                 
+                # 每5次检测输出一次OCR识别结果（调试用）
+                if check_count % 5 == 1:
+                    text_names = [t.name for t in texts]
+                    self._log(f"[OCR识别结果] {text_names}")
+                
                 # 检测"漫斗赛"（简繁双语）
                 mandou_found = False
                 mandou_pattern = re.compile(r"漫斗赛|漫鬥賽")
-                if self.task.find_boxes(texts, match=mandou_pattern):
+                mandou_matched = self.task.find_boxes(texts, match=mandou_pattern)
+                if mandou_matched:
                     mandou_found = True
-                    self._log_verbose("检测到'漫斗赛'")
+                    self._log(f"检测到'漫斗赛': {mandou_matched[0].name}")
                 
                 # 检测"排位赛"（简繁双语）
                 paiwei_found = False
                 paiwei_pattern = re.compile(r"排位赛|排位賽")
-                if self.task.find_boxes(texts, match=paiwei_pattern):
+                paiwei_matched = self.task.find_boxes(texts, match=paiwei_pattern)
+                if paiwei_matched:
                     paiwei_found = True
-                    self._log_verbose("检测到'排位赛'")
+                    self._log(f"检测到'排位赛': {paiwei_matched[0].name}")
                 
                 # 两个都检测到
                 if mandou_found and paiwei_found:
@@ -1016,7 +1126,7 @@ class Phase2Handler:
                 
                 time.sleep(0.3)
             
-            self._log(f"主界面验证尝试 {retry + 1} 超时")
+            self._log(f"主界面验证尝试 {retry + 1} 超时，共检测 {check_count} 次")
             
             if retry < max_retry - 1:
                 self._log("等待2秒后重试...")

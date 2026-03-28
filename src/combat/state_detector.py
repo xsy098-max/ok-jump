@@ -30,6 +30,7 @@ class StateDetector:
     - 自身位置
     - 友方单位
     - 敌方单位
+    - 战斗状态（通过自身角色检测判断是否在战斗中）
     """
     
     def __init__(self, task):
@@ -49,6 +50,16 @@ class StateDetector:
         self._death_monitor_thread = None
         self._death_lock = threading.Lock()
         self._death_check_interval = 0.03  # 30ms检测一次，更快响应状态变化
+        
+        # 战斗状态检测相关（通过YOLO自身检测判断）
+        self._in_combat_state = False
+        self._combat_state_lock = threading.Lock()
+        
+        # 战斗状态切换的防抖动机制
+        self._consecutive_self_found = 0  # 连续检测到自身的次数
+        self._consecutive_self_not_found = 0  # 连续未检测到自身的次数
+        self._self_found_threshold = 2  # 连续2次检测到自身才确认进入战斗
+        self._self_not_found_threshold = 3  # 连续3次未检测到自身才确认退出战斗
     
     def set_verbose(self, verbose):
         """设置是否输出详细日志"""
@@ -493,3 +504,85 @@ class StateDetector:
                 nearest = target
         
         return nearest
+    
+    # ==================== 战斗状态检测（通过YOLO自身检测）====================
+    
+    def check_combat_state_by_self_detection(self):
+        """
+        通过YOLO自身检测判断战斗状态（非测试模式下使用）
+        
+        此方法执行单次自身检测，并根据结果更新战斗状态。
+        使用防抖动机制避免状态频繁切换。
+        
+        Returns:
+            tuple: (in_combat_state, state_changed)
+                - in_combat_state: 当前是否在战斗状态
+                - state_changed: 状态是否发生变化
+        """
+        # 更新帧
+        if hasattr(self.task, 'next_frame'):
+            self.task.next_frame()
+        
+        # 执行单次自身检测
+        self_pos = self.detect_self_once()
+        
+        state_changed = False
+        
+        with self._combat_state_lock:
+            if self_pos is not None:
+                # 检测到自身
+                self._consecutive_self_found += 1
+                self._consecutive_self_not_found = 0
+                
+                # 连续检测到自身达到阈值，确认进入战斗
+                if not self._in_combat_state and self._consecutive_self_found >= self._self_found_threshold:
+                    self._in_combat_state = True
+                    state_changed = True
+                    self._log(f"战斗状态检测: 进入战斗 (连续{self._consecutive_self_found}次检测到自身)")
+            else:
+                # 未检测到自身
+                self._consecutive_self_not_found += 1
+                self._consecutive_self_found = 0
+                
+                # 连续未检测到自身达到阈值，确认退出战斗
+                if self._in_combat_state and self._consecutive_self_not_found >= self._self_not_found_threshold:
+                    self._in_combat_state = False
+                    state_changed = True
+                    self._log(f"战斗状态检测: 退出战斗 (连续{self._consecutive_self_not_found}次未检测到自身)")
+            
+            return self._in_combat_state, state_changed
+    
+    def is_in_combat_state(self):
+        """
+        快速查询当前是否在战斗状态
+        
+        Returns:
+            bool: True 如果在战斗状态中
+        """
+        with self._combat_state_lock:
+            return self._in_combat_state
+    
+    def set_combat_state(self, in_combat):
+        """
+        手动设置战斗状态
+        
+        Args:
+            in_combat: 是否在战斗状态
+        """
+        with self._combat_state_lock:
+            if self._in_combat_state != in_combat:
+                self._in_combat_state = in_combat
+                self._log(f"战斗状态手动设置为: {'战斗中' if in_combat else '非战斗'}")
+            # 重置计数器
+            self._consecutive_self_found = 0
+            self._consecutive_self_not_found = 0
+    
+    def reset_combat_state(self):
+        """
+        重置战斗状态（退出时调用）
+        """
+        with self._combat_state_lock:
+            self._in_combat_state = False
+            self._consecutive_self_found = 0
+            self._consecutive_self_not_found = 0
+            self._log("战斗状态已重置")

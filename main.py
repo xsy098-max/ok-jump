@@ -144,6 +144,35 @@ def patch_adb_connect_error_handling():
     logger.info('DeviceManager.adb_connect patched: timeout errors suppressed')
 
 
+def patch_ocr_negative_box_logging():
+    """
+    Suppress harmless PaddleOCR 'negative box' error logs.
+    These occur when OCR detects text with negative coordinates in rotated boxes,
+    which is internal framework behavior and does not affect functionality.
+    """
+    import logging
+    logger = Logger.get_logger(__name__)
+
+    class OCRNegativeBoxFilter(logging.Filter):
+        def filter(self, record):
+            # Suppress 'ocr result negative box' messages
+            msg = record.getMessage()
+            if 'negative box' in msg:
+                return False
+            return True
+
+    # Add filter to the root logger's handlers (catches all loggers)
+    for handler in logging.root.handlers:
+        handler.addFilter(OCRNegativeBoxFilter())
+    
+    # Also add to ok logger's handlers
+    ok_logger = logging.getLogger('ok')
+    for handler in ok_logger.handlers:
+        handler.addFilter(OCRNegativeBoxFilter())
+    
+    logger.info('OCR negative box error logging suppressed')
+
+
 def patch_task_buttons_alignment():
     """
     Patch TaskButtons to fix button alignment issue
@@ -222,4 +251,6 @@ if __name__ == '__main__':
     patch_task_buttons_alignment()
     # Initialize OK framework (will read devices.json)
     ok = OK(config)
+    # Apply OCR logging patch AFTER OK is initialized (log handlers are set up then)
+    patch_ocr_negative_box_logging()
     ok.start()
