@@ -62,6 +62,11 @@ class Globals(QObject):
         # 新手教程完成状态（用于通知自动战斗触发器）
         self._tutorial_completed = False
 
+        # CI测试状态
+        self._ci_test_running = False
+        self._ci_deployment_result = None
+        self._ci_test_report = None
+
     # ==================== 登录状态管理 ====================
 
     @property
@@ -333,3 +338,68 @@ class Globals(QObject):
         """重置 YOLO 模型（释放内存）"""
         self._yolo_model = None
         self._yolo_model_2 = None
+
+    # ==================== CI测试状态管理 ====================
+
+    @property
+    def ci_test_running(self) -> bool:
+        """
+        获取CI测试运行状态
+
+        Returns:
+            bool: True 如果CI测试正在运行
+        """
+        return self._ci_test_running
+
+    def set_ci_test_running(self, running: bool):
+        """
+        设置CI测试运行状态
+
+        Args:
+            running: 是否正在运行
+        """
+        self._ci_test_running = running
+
+    @property
+    def ci_deployment_result(self):
+        """
+        获取CI部署结果
+
+        Returns:
+            DeploymentResult: 部署结果对象
+        """
+        return self._ci_deployment_result
+
+    def set_ci_deployment_result(self, result):
+        """
+        设置CI部署结果
+
+        Args:
+            result: 部署结果对象
+        """
+        self._ci_deployment_result = result
+
+    @property
+    def ci_test_report(self):
+        """
+        获取CI测试报告
+
+        Returns:
+            TestReport: 测试报告对象
+        """
+        return self._ci_test_report
+
+    def set_ci_test_report(self, report):
+        """
+        设置CI测试报告
+
+        Args:
+            report: 测试报告对象
+        """
+        self._ci_test_report = report
+
+    def reset_ci_state(self):
+        """重置CI测试状态"""
+        self._ci_test_running = False
+        self._ci_deployment_result = None
+        self._ci_test_report = None

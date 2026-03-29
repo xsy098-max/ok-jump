@@ -438,7 +438,7 @@ end
 
 **核心机制：**
 - **坐标阈值检测**：10像素内的坐标视为同一位置
-- **历史记录管理**：最多记录6个位置点
+- **历史记录管理**：最多记录4个位置点
 - **聚类分析**：将位置分为两组区域（A区和B区）
 - **模式识别**：检测A-B-A-B或类似来回模式
 
@@ -448,7 +448,7 @@ end
 3. 如果模式是 A-B-A-B 或类似来回模式，则判定为抖动
 
 **章节来源**
-- [phase1_handler.py:915-1021](file://src/tutorial/phase1_handler.py#L915-L1021)
+- [phase1_handler.py:1016-1146](file://src/tutorial/phase1_handler.py#L1016-L1146)
 
 ### 移动方向抖动检测
 
@@ -465,7 +465,7 @@ end
 - 如果检测到方向抖动，执行随机移动摆脱卡死状态
 
 **章节来源**
-- [phase1_handler.py:1023-1067](file://src/tutorial/phase1_handler.py#L1023-L1067)
+- [phase1_handler.py:1147-1192](file://src/tutorial/phase1_handler.py#L1147-L1192)
 
 ### 随机移动缓解机制
 
@@ -478,19 +478,19 @@ end
 - **历史清空**：清空位置和方向历史，重新开始检测
 
 **章节来源**
-- [phase1_handler.py:1069-1084](file://src/tutorial/phase1_handler.py#L1069-L1084)
+- [phase1_handler.py:1264-1281](file://src/tutorial/phase1_handler.py#L1264-L1281)
 
 ### 卡住检测机制
 
 除了抖动检测外，系统还具备卡住检测功能：
 
 **检测逻辑：**
-- 如果最近6个位置都在10像素范围内，认为角色被卡住
+- 如果最近4次检测到相同坐标（10像素阈值），认为角色被卡住
 - 每次触发后清空历史，允许再次检测
 - 检测到卡住时，向下移动1秒
 
 **章节来源**
-- [phase1_handler.py:1085-1120](file://src/tutorial/phase1_handler.py#L1085-L1120)
+- [phase1_handler.py:1111-1146](file://src/tutorial/phase1_handler.py#L1111-L1146)
 
 ### 死亡状态监控
 
@@ -502,7 +502,7 @@ end
 - **状态恢复**：自动恢复到正常战斗状态
 
 **章节来源**
-- [phase1_handler.py:663-704](file://src/tutorial/phase1_handler.py#L663-L704)
+- [phase1_handler.py:690-732](file://src/tutorial/phase1_handler.py#L690-L732)
 
 ## 敌人位置平滑算法
 
@@ -537,7 +537,7 @@ C --> N[返回位置]
 ```
 
 **图表来源**
-- [phase1_handler.py:1208-1277](file://src/tutorial/phase1_handler.py#L1208-L1277)
+- [phase1_handler.py:1193-1263](file://src/tutorial/phase1_handler.py#L1193-L1263)
 
 ### 算法细节
 
@@ -557,13 +557,13 @@ C --> N[返回位置]
 - 避免大幅跳跃位置影响跟踪稳定性
 
 **匹配范围放宽：**
-- 目标锁定匹配范围从150px放宽到300px
+- 目标锁定匹配范围从200px放宽到300px
 - 适应YOLO检测抖动，提高目标跟踪稳定性
 - 减少目标频繁切换问题
 
 **章节来源**
-- [phase1_handler.py:1208-1277](file://src/tutorial/phase1_handler.py#L1208-L1277)
-- [phase1_handler.py:872-908](file://src/tutorial/phase1_handler.py#L872-L908)
+- [phase1_handler.py:1193-1263](file://src/tutorial/phase1_handler.py#L1193-L1263)
+- [phase1_handler.py:888-908](file://src/tutorial/phase1_handler.py#L888-L908)
 
 ### 算法优势
 
@@ -586,8 +586,8 @@ C --> N[返回位置]
 - **状态同步**：通过锁机制确保线程安全
 
 **章节来源**
-- [phase1_handler.py:653-670](file://src/tutorial/phase1_handler.py#L653-L670)
-- [tutorial_detector.py:602-766](file://src/tutorial/tutorial_detector.py#L602-L766)
+- [phase1_handler.py:694-712](file://src/tutorial/phase1_handler.py#L694-L712)
+- [tutorial_detector.py:620-783](file://src/tutorial/tutorial_detector.py#L620-L783)
 
 ### 死亡状态监控
 
@@ -597,7 +597,7 @@ C --> N[返回位置]
 - **状态恢复**：自动恢复到正常战斗状态
 
 **章节来源**
-- [phase1_handler.py:659-661](file://src/tutorial/phase1_handler.py#L659-L661)
+- [phase1_handler.py:690-732](file://src/tutorial/phase1_handler.py#L690-L732)
 
 ### 第二阶段并行检测
 
@@ -610,7 +610,7 @@ C --> N[返回位置]
 - **资源管理**：自动清理线程资源
 
 **章节来源**
-- [phase2_handler.py:339-377](file://src/tutorial/phase2_handler.py#L339-L377)
+- [phase2_handler.py:467-733](file://src/tutorial/phase2_handler.py#L467-L733)
 
 ## 依赖关系分析
 
