@@ -17,6 +17,10 @@ build/
 Thumbs.db
 .DS_Store
 nul
+nul_
+
+# Test results
+test_results/
 
 # Env
 .env
@@ -27,3 +31,4 @@ logs/
 # Build artifacts
 *.spec
 =*
+packages/

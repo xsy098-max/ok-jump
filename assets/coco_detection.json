@@ -107,6 +107,12 @@
             "file_name": "images/new/end02.png",
             "height": 40,
             "width": 147
+        },
+        {
+            "id": 18,
+            "file_name": "images/login/skip.png",
+            "height": 54,
+            "width": 70
         }
     ],
     "categories": [
@@ -284,6 +290,16 @@
             "id": 303,
             "name": "tutorial_end02",
             "supercategory": "tutorial_ui"
+        },
+        {
+            "id": 121,
+            "name": "skip_button",
+            "supercategory": "login_ui"
+        },
+        {
+            "id": 122,
+            "name": "login_screen_ex_indicator",
+            "supercategory": "login_ui"
         }
     ],
     "annotations": [
@@ -453,6 +469,22 @@
             "category_id": 303,
             "bbox": [0, 0, 147, 40],
             "area": 5880.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 21,
+            "image_id": 18,
+            "category_id": 121,
+            "bbox": [0, 0, 70, 54],
+            "area": 3780.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 22,
+            "image_id": 18,
+            "category_id": 122,
+            "bbox": [0, 0, 70, 54],
+            "area": 3780.0,
             "iscrowd": 0
         }
     ]

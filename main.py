@@ -1,6 +1,8 @@
 import atexit
 import json
 import subprocess
+import sys
+import time
 import zipfile
 from pathlib import Path
 
@@ -77,11 +79,13 @@ def export_logs():
 def patch_start_controller():
     """
     Patch StartController to allow minimized/off-screen window for background mode
+    and skip device checks for CITestTask (which handles its own deployment)
     """
     from ok.gui.StartController import StartController
     logger = Logger.get_logger(__name__)
     
     original_check_device_error = StartController.check_device_error
+    original_do_start = StartController.do_start
     
     def patched_check_device_error(self):
         # Get the original result
@@ -95,8 +99,89 @@ def patch_start_controller():
         
         return result
     
+    def patched_do_start(self, task=None, exit_after=False):
+        """
+        Patched do_start that skips device checks for CITestTask.
+        CITestTask handles its own deployment flow (download -> emulator -> install -> game).
+        """
+        from ok.gui.Communicate import communicate
+        from src.task.CITestTask import CITestTask
+            
+        # Determine if this is a CITestTask
+        # task can be: None, int (index), or the task object itself
+        is_ci_task = False
+        task_obj = None
+            
+        if isinstance(task, int):
+            # Task is specified by index
+            if hasattr(og, 'executor') and og.executor:
+                if task < len(og.executor.onetime_tasks):
+                    task_obj = og.executor.onetime_tasks[task]
+                    if isinstance(task_obj, CITestTask):
+                        is_ci_task = True
+                        logger.info(f'CITestTask detected by index {task}')
+        elif task is not None:
+            # Task is the object itself (from GUI click)
+            if isinstance(task, CITestTask):
+                is_ci_task = True
+                task_obj = task
+                logger.info(f'CITestTask detected by object: {task.name}')
+            
+        if is_ci_task:
+            # For CITestTask, skip all device checks and run directly in a thread
+            # We need TaskExecutor to run for frame capture support
+            logger.info('CITestTask: bypassing device checks, running directly')
+            communicate.starting_emulator.emit(True, None, 0)
+            
+            # Store exit_after flag on the task
+            if exit_after:
+                task_obj.exit_after_task = True
+            
+            # Start TaskExecutor for frame capture support
+            # This is required for next_frame() to work in sub-tasks
+            if hasattr(og, 'executor') and og.executor is not None:
+                try:
+                    og.executor.start()
+                    logger.info('TaskExecutor started for frame capture support')
+                except Exception as e:
+                    logger.warning(f'TaskExecutor start failed (may already be running): {e}')
+            
+            # Run CITestTask in a separate thread
+            import threading
+            
+            def run_ci_task():
+                try:
+                    logger.info(f'Starting CITestTask in dedicated thread')
+                    communicate.task.emit(task_obj)
+                    task_obj.running = True
+                    task_obj.start_time = time.time()
+                    result = task_obj.run()
+                    logger.info(f'CITestTask completed with result: {result}')
+                except Exception as e:
+                    logger.error(f'CITestTask failed with exception: {e}', exc_info=True)
+                finally:
+                    task_obj.running = False
+                    communicate.task_done.emit(task_obj)
+                    communicate.task.emit(None)
+                    
+                    if task_obj.exit_after_task or task_obj.config.get('Exit After Task'):
+                        logger.info('CITestTask finished, exiting app')
+                        from ok.gui.util.Alert import alert_info
+                        alert_info('Successfully Executed Task, Exiting App!')
+                        time.sleep(3)
+                        communicate.quit.emit()
+            
+            ci_thread = threading.Thread(target=run_ci_task, name='CITestTask', daemon=True)
+            ci_thread.start()
+            return
+            
+            
+        # For other tasks, use the original logic
+        original_do_start(self, task, exit_after)
+    
     StartController.check_device_error = patched_check_device_error
-    logger.info('StartController patched: skip_pos_check support enabled')
+    StartController.do_start = patched_do_start
+    logger.info('StartController patched: skip_pos_check support and CITestTask bypass enabled')
 
 
 def patch_adb_connect_error_handling():
@@ -142,6 +227,66 @@ def patch_adb_connect_error_handling():
 
     DeviceManager.adb_connect = patched_adb_connect
     logger.info('DeviceManager.adb_connect patched: timeout errors suppressed')
+
+
+def patch_ocr_negative_box_logging():
+    """
+    Suppress harmless PaddleOCR 'negative box' error logs.
+    These occur when OCR detects text with negative coordinates in rotated boxes,
+    which is internal framework behavior and does not affect functionality.
+    """
+    import logging
+    logger = Logger.get_logger(__name__)
+
+    class OCRNegativeBoxFilter(logging.Filter):
+        def filter(self, record):
+            # Suppress 'ocr result negative box' messages
+            msg = record.getMessage()
+            if 'negative box' in msg:
+                return False
+            return True
+
+    # Add filter to the root logger's handlers (catches all loggers)
+    for handler in logging.root.handlers:
+        handler.addFilter(OCRNegativeBoxFilter())
+    
+    # Also add to ok logger's handlers
+    ok_logger = logging.getLogger('ok')
+    for handler in ok_logger.handlers:
+        handler.addFilter(OCRNegativeBoxFilter())
+    
+    logger.info('OCR negative box error logging suppressed')
+
+
+def patch_task_executor_frame_logging():
+    """
+    Suppress harmless 'got no frame' error logs from TaskExecutor.
+    This error occurs when the capture system temporarily cannot get a frame,
+    which is expected behavior during window transitions, loading screens,
+    or when the game window is not yet ready. The task will retry automatically.
+    """
+    import logging
+    logger = Logger.get_logger(__name__)
+
+    class TaskExecutorFrameFilter(logging.Filter):
+        def filter(self, record):
+            # Suppress 'got no frame' messages from TaskExecutor
+            msg = record.getMessage()
+            if 'got no frame' in msg.lower():
+                # Downgrade to DEBUG level by suppressing the ERROR log
+                return False
+            return True
+
+    # Add filter to the root logger's handlers (catches all loggers)
+    for handler in logging.root.handlers:
+        handler.addFilter(TaskExecutorFrameFilter())
+    
+    # Also add to ok logger's handlers
+    ok_logger = logging.getLogger('ok')
+    for handler in ok_logger.handlers:
+        handler.addFilter(TaskExecutorFrameFilter())
+    
+    logger.info("TaskExecutor 'got no frame' error logging suppressed")
 
 
 def patch_task_buttons_alignment():
@@ -222,4 +367,8 @@ if __name__ == '__main__':
     patch_task_buttons_alignment()
     # Initialize OK framework (will read devices.json)
     ok = OK(config)
+    # Apply OCR logging patch AFTER OK is initialized (log handlers are set up then)
+    patch_ocr_negative_box_logging()
+    # Apply TaskExecutor frame logging patch
+    patch_task_executor_frame_logging()
     ok.start()

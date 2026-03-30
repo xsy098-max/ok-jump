@@ -21,6 +21,7 @@ from src.task.BaseJumpTask import BaseJumpTask
 from src.tutorial.state_machine import TutorialState
 from src.tutorial.character_selector import CharacterSelector, CharacterType
 from src.tutorial.phase1_handler import Phase1Handler
+from src.tutorial.phase2_handler import Phase2Handler
 from src.utils import background_manager
 
 
@@ -52,6 +53,7 @@ class AutoTutorialTask(BaseJumpTask):
         }
         
         # 配置类型定义（下拉框等）
+        # 注意：double类型会由框架自动使用LabelAndDoubleSpinBox，无需显式定义
         self.config_type = {
             '角色选择': {'type': 'drop_down', 'options': ['悟空', '路飞', '小鸣人', '全部']},
         }
@@ -73,6 +75,7 @@ class AutoTutorialTask(BaseJumpTask):
         
         # 处理器
         self._phase1_handler: Phase1Handler = None
+        self._phase2_handler: Phase2Handler = None
         
         # 内部状态
         self._current_character_index = 0
@@ -121,30 +124,67 @@ class AutoTutorialTask(BaseJumpTask):
         """
         self.logger.info(f"开始执行角色 '{character}' 的新手教程")
         
+        # ========== 第一阶段 ==========
         # 创建第一阶段处理器
         self._phase1_handler = Phase1Handler(self)
         self._phase1_handler.initialize(character)
         
         # 运行第一阶段
-        success = self._phase1_handler.run()
+        phase1_success = self._phase1_handler.run()
         
-        if success:
-            self.logger.info(f"角色 '{character}' 新手教程第一阶段完成")
-            
-            # TODO: 第二阶段和收尾阶段（预留）
-            # self._run_phase2()
-            # self._run_phase3()
-            
-            self.logger.info(f"角色 '{character}' 新手教程完成")
-        else:
+        if not phase1_success:
             reason = self._phase1_handler.state_machine.failure_reason
-            self.logger.error(f"角色 '{character}' 新手教程失败: {reason}")
+            self.logger.error(f"角色 '{character}' 新手教程第一阶段失败: {reason}")
             self._save_error_screenshot(f"{character}_tutorial_failed")
+            self._phase1_handler.cleanup()
+            return False
+        
+        self.logger.info(f"角色 '{character}' 新手教程第一阶段完成")
+        
+        # ========== 第二阶段 ==========
+        self.logger.info(f"开始执行角色 '{character}' 的新手教程第二阶段")
+        
+        # 创建第二阶段处理器（参照 Phase1Handler 的创建方式）
+        self._phase2_handler = Phase2Handler(self)
+        self._phase2_handler.set_verbose(self.config.get('详细日志', False))
+        
+        # 运行第二阶段
+        phase2_success = self._phase2_handler.run()
+        
+        if not phase2_success:
+            self.logger.error(f"角色 '{character}' 新手教程第二阶段失败")
+            self._save_error_screenshot(f"{character}_phase2_failed")
+            self._phase2_handler.cleanup()
+            self._phase1_handler.cleanup()
+            return False
+        
+        self.logger.info(f"角色 '{character}' 新手教程第二阶段完成")
+        
+        # ========== 任务结束处理 ==========
+        # 更新状态机到 COMPLETED 状态
+        self._phase1_handler.state_machine.transition_to(TutorialState.PHASE2_3V3)
+        self._phase1_handler.state_machine.transition_to(TutorialState.COMPLETED)
+        
+        # 标记全局教程完成状态（延迟导入避免循环导入）
+        from src import jump_globals
+        if jump_globals is not None:
+            jump_globals.set_tutorial_completed(True)
+            self.logger.info("新手引导全局完成状态已标记")
+        else:
+            self.logger.info("jump_globals 未初始化，跳过全局状态标记")
         
         # 清理资源
+        self._phase2_handler.cleanup()
         self._phase1_handler.cleanup()
         
-        return success
+        # 记录完成日志
+        self.logger.info("=" * 50)
+        self.logger.info(f"恭喜！角色 '{character}' 新手引导全流程完成！")
+        self.logger.info("新手教程任务已成功结束")
+        self.logger.info("GUI窗口保持打开，可以继续执行其他任务")
+        self.logger.info("=" * 50)
+        
+        return True
     
     def _run_all_characters(self, selector: CharacterSelector) -> bool:
         """
@@ -218,13 +258,19 @@ class AutoTutorialTask(BaseJumpTask):
         if not os.path.exists(screenshots_dir):
             os.makedirs(screenshots_dir)
         
+        # 将中文等非ASCII字符转换为安全的ASCII字符
+        # 使用拼音或替换为英文标识
         safe_name = re.sub(r'[\\/:*?"<>|]', '_', error_name)
+        # 移除或替换非ASCII字符，避免编码问题
+        safe_name = safe_name.encode('ascii', 'replace').decode('ascii')
         filename = f"{safe_name}_{time.strftime('%H-%M-%S')}.png"
         filepath = os.path.join(screenshots_dir, filename)
         
         if self.frame is not None:
             cv2.imwrite(filepath, self.frame)
             self.logger.error(f"错误截图已保存: {filepath}")
+            return filepath
+        return None
     
     def get_current_state(self) -> str:
         """

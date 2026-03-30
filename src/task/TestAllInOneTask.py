@@ -27,6 +27,9 @@ class TestAllInOneTask(BaseJumpTask):
         self.name = "TestAllInOneTask"
         self.description = "测试一条龙 - 可选择执行多个任务"
         
+        # 错误信息存储
+        self._last_error_info = None
+        
         # 默认配置 - 必须在 __init__ 中定义为实例属性
         self.default_config = {
             '执行自动登录': True,
@@ -118,9 +121,17 @@ class TestAllInOneTask(BaseJumpTask):
                     prev_task_class = task_class
                 else:
                     self.logger.error(f"❌ {task_name} 执行失败")
+                    # 获取子任务的详细错误信息
+                    detailed_error = "任务返回失败"
+                    if hasattr(task_instance, '_last_error') and task_instance._last_error:
+                        detailed_error = task_instance._last_error
+                    self._last_error_info = {"task_name": task_name, "error": detailed_error}
                     break  # 如果某个任务失败，则停止后续任务
             except Exception as e:
-                self.logger.error(f"❌ {task_name} 执行异常: {e}")
+                import traceback
+                self.logger.error(f"❌ {task_name} 执行异常: {type(e).__name__}: {e}")
+                self.logger.debug(traceback.format_exc())
+                self._last_error_info = {"task_name": task_name, "error": f"{type(e).__name__}: {e}"}
                 break
                 
         # 总结

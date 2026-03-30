@@ -7,9 +7,10 @@ from src.task.AutoCombatTask import AutoCombatTask
 from src.task.DailyTask import DailyTask
 from src.task.AutoTutorialTask import AutoTutorialTask
 from src.task.TestAllInOneTask import TestAllInOneTask
+from src.task.CITestTask import CITestTask
 
 __all__ = [
-    'BaseJumpTask', 
+    'BaseJumpTask',
     'BaseJumpTriggerTask',
     'MainWindowTask',
     'AutoLoginTask',
@@ -17,5 +18,6 @@ __all__ = [
     'AutoCombatTask',
     'DailyTask',
     'AutoTutorialTask',
-    'TestAllInOneTask'
+    'TestAllInOneTask',
+    'CITestTask'
 ]

@@ -1,6 +1,8 @@
 ok-script>=1.0.0
 PySide6-Essentials>=6.7.0
 PySide6-Fluent-Widgets>=1.5.5
+requests>=2.31.0
+schedule>=1.2.0
 opencv-python>=4.9.0.80
 numpy>=1.26.4
 adbutils>=2.2.1

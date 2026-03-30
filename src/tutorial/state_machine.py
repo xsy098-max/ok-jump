@@ -46,8 +46,7 @@ class TutorialState(Enum):
     
     # 预留阶段
     PHASE1_END = 'phase1_end'                          # 第一阶段结束
-    PHASE2_3V3 = 'phase2_3v3'                          # 第二阶段3V3(预留)
-    PHASE3_FINISH = 'phase3_finish'                    # 收尾阶段(预留)
+    PHASE2_3V3 = 'phase2_3v3'                          # 第二阶段3V3
     
     # 终态
     COMPLETED = 'completed'                            # 全部完成
@@ -69,15 +68,14 @@ class TutorialStateMachine:
         TutorialState.CONFIRM_DIALOG: [TutorialState.SECOND_CLICK, TutorialState.FAILED],
         TutorialState.SECOND_CLICK: [TutorialState.LOADING, TutorialState.FAILED],
         TutorialState.LOADING: [TutorialState.SELF_DETECTION, TutorialState.FAILED],
-        TutorialState.SELF_DETECTION: [TutorialState.TARGET_DETECTION, TutorialState.FAILED],
+        TutorialState.SELF_DETECTION: [TutorialState.TARGET_DETECTION, TutorialState.NORMAL_ATTACK_DETECTION, TutorialState.FAILED],
         TutorialState.TARGET_DETECTION: [TutorialState.MOVE_TO_TARGET, TutorialState.FAILED],
         TutorialState.MOVE_TO_TARGET: [TutorialState.NORMAL_ATTACK_DETECTION, TutorialState.FAILED],
         TutorialState.NORMAL_ATTACK_DETECTION: [TutorialState.MOVE_DOWN, TutorialState.FAILED],
         TutorialState.MOVE_DOWN: [TutorialState.COMBAT_TRIGGER, TutorialState.FAILED],
         TutorialState.COMBAT_TRIGGER: [TutorialState.PHASE1_END, TutorialState.FAILED],
-        TutorialState.PHASE1_END: [TutorialState.PHASE2_3V3, TutorialState.COMPLETED],
-        TutorialState.PHASE2_3V3: [TutorialState.PHASE3_FINISH, TutorialState.FAILED],
-        TutorialState.PHASE3_FINISH: [TutorialState.COMPLETED, TutorialState.FAILED],
+        TutorialState.PHASE1_END: [TutorialState.PHASE2_3V3, TutorialState.FAILED],
+        TutorialState.PHASE2_3V3: [TutorialState.COMPLETED, TutorialState.FAILED],
     }
     
     def __init__(self):
@@ -204,7 +202,6 @@ class TutorialStateMachine:
             TutorialState.PHASE1_END_DETECTION: '第一阶段结束检测',
             TutorialState.PHASE1_END: '第一阶段结束',
             TutorialState.PHASE2_3V3: '第二阶段3V3',
-            TutorialState.PHASE3_FINISH: '收尾阶段',
             TutorialState.COMPLETED: '完成',
             TutorialState.FAILED: '失败',
         }

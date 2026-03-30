@@ -20,11 +20,13 @@ class Features:
     # ==================== 登录界面相关 ====================
 
     # 登录界面指示器
+    LOGIN_SCREEN_EX_INDICATOR = 'login_screen_ex_indicator'  # 快进按钮界面
     LOGIN_SCREEN_0_INDICATOR = 'login_screen_0_indicator'  # 适龄提示界面
     LOGIN_SCREEN_1_INDICATOR = 'login_screen_1_indicator'  # 账户登录界面
     LOGIN_SCREEN_2_INDICATOR = 'login_screen_2_indicator'  # 开始游戏界面
 
     # 登录按钮
+    SKIP_BUTTON = 'skip_button'                  # 快进按钮（跳过开场动画）
     ENTER_GAME_BUTTON = 'enter_game_button'    # 进入游戏按钮
     START_GAME_BUTTON = 'start_game_button'    # 开始游戏按钮
     LOGIN_BUTTON = 'login_button'              # 登录按钮
@@ -86,6 +88,11 @@ class Features:
     TUTORIAL_CONFIRM_BUTTON = 'tutorial_confirm_button' # 确定按钮
     TUTORIAL_END01 = 'tutorial_end01'                   # 第一阶段结束标志
     TUTORIAL_END02 = 'tutorial_end02'                   # 开始对战按钮
+    TUTORIAL_FIGHT_START = 'fight_start'                # 战斗开始标志
+    TUTORIAL_FIGHT_END = 'fight_end'                    # 战斗结束标志
+    TUTORIAL_MVP_OUT = 'out'                            # MVP场景退出按钮（第一次）
+    TUTORIAL_MVP_OUT2 = 'out2'                          # MVP场景退出按钮（第二次）
+    TUTORIAL_NEW_HERO = 'new_hero'                      # 新英雄场景标志
 
 
 # 便于导入的别名

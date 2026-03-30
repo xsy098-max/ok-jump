@@ -30,6 +30,7 @@ class AutoLoginTask(BaseJumpTask):
     """
 
     # 界面状态标识
+    LOGIN_SCREEN_EX = 'login_screen_ex'      # 快进按钮界面（新增）
     LOGIN_SCREEN_0 = 'login_screen_0'      # 适龄提示界面
     LOGIN_SCREEN_1 = 'login_screen_1'      # 账户登录界面
     LOGIN_SCREEN_2 = 'login_screen_2'      # 开始游戏界面
@@ -37,6 +38,9 @@ class AutoLoginTask(BaseJumpTask):
     WENJUAN_SCREEN = 'wenjuan_screen'      # 问卷调查界面
     CHARACTER_SELECTION_SCREEN = 'character_selection_screen'  # 角色选择界面
     UNKNOWN_SCREEN = 'unknown_screen'      # 未知界面
+
+    # 未知界面检测常量
+    UNKNOWN_SCREEN_MAX_COUNT = 3           # 连续检测到未知界面的最大次数
 
     # 账号输入相关常量
     ACCOUNT_INPUT_TEMPLATE_PATH = os.path.join('assets', 'images', 'login', 'input.png')
@@ -52,7 +56,7 @@ class AutoLoginTask(BaseJumpTask):
     CHECKBOX_MODEL_PATH = os.path.join('assets', 'select', 'select.onnx')
     CHECKBOX_LABEL_CHECKED = 0    # 已勾选
     CHECKBOX_LABEL_UNCHECKED = 1  # 未勾选
-    CHECKBOX_CONF_THRESHOLD = 0.5  # YOLO置信度阈值
+    CHECKBOX_CONF_THRESHOLD = 0.45  # YOLO置信度阈值
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -79,10 +83,13 @@ class AutoLoginTask(BaseJumpTask):
         self._grace_period = 5.0  # 容错缓冲期（秒）
         self._final_status = None  # 最终状态
 
+        # 未知界面检测相关属性
+        self._unknown_screen_count = 0  # 连续检测到未知界面的次数
+
         self.default_config = {
             '自动启动游戏': False,
             '等待游戏启动(秒)': 120,
-            '最大登录尝试次数': 5,
+            '最大登录尝试次数': 8,
             '输入账号': False,
             '账号': '',
             '账号输入重试次数': 2,
@@ -128,6 +135,22 @@ class AutoLoginTask(BaseJumpTask):
 
     def _cfg(self, key, default=None):
         """获取配置值"""
+        # 优先从 og.config 获取 CI 传递的账号配置
+        if key == '账号':
+            try:
+                from ok import og
+                if hasattr(og, 'config') and og.config and 'ci_account' in og.config:
+                    return og.config['ci_account']
+            except Exception:
+                pass
+        elif key == '输入账号':
+            try:
+                from ok import og
+                if hasattr(og, 'config') and og.config and 'ci_input_account' in og.config:
+                    return og.config['ci_input_account']
+            except Exception:
+                pass
+        
         if self.config is not None:
             return self.config.get(key, default)
         return self.default_config.get(key, default)
@@ -285,7 +308,11 @@ class AutoLoginTask(BaseJumpTask):
             return True
 
     def _wait_for_game_window(self):
-        """等待游戏窗口出现"""
+        """
+        等待游戏窗口出现
+        
+        如果检测到已进入登录界面（界面EX/0/1/2），则提前退出等待
+        """
         timeout = self._cfg('等待游戏启动(秒)', 120)
         self.log_info(f"等待游戏窗口... (最长 {timeout} 秒)")
 
@@ -297,6 +324,20 @@ class AutoLoginTask(BaseJumpTask):
             self.next_frame()
             if self.frame is not None:
                 self.log_info("检测到游戏窗口")
+                
+                # 检查是否已进入登录界面，如果是则提前退出等待
+                self._clear_ocr_cache()
+                current_screen = self._detect_login_screen()
+                if current_screen in [
+                    self.LOGIN_SCREEN_EX,
+                    self.LOGIN_SCREEN_0,
+                    self.LOGIN_SCREEN_1,
+                    self.LOGIN_SCREEN_2,
+                    self.CHARACTER_SELECTION_SCREEN
+                ]:
+                    self.log_info(f"已检测到登录界面: {current_screen}，跳过等待")
+                    return True
+                
                 return True
             time.sleep(1)
 
@@ -511,7 +552,7 @@ class AutoLoginTask(BaseJumpTask):
     def _execute_login_flow(self):
         """执行登录流程（支持加载检测和状态容错）"""
         timeout = self._cfg('登录等待超时(秒)', 60)
-        max_attempts = self._cfg('最大登录尝试次数', 5)
+        max_attempts = self._cfg('最大登录尝试次数', 8)
         click_wait = self._cfg('点击后等待时间(秒)', 3)
 
         start_time = time.time()
@@ -526,6 +567,7 @@ class AutoLoginTask(BaseJumpTask):
         self._last_percentage_time = None
         self._is_loading = False
         self._failure_time = None
+        self._unknown_screen_count = 0  # 重置未知界面计数
 
         while True:
             # 检查有效超时（扣除加载暂停时间）
@@ -533,12 +575,14 @@ class AutoLoginTask(BaseJumpTask):
             if remaining_time <= 0:
                 self._last_error = f"登录超时 (总超时: {timeout}秒, 加载暂停: {self._paused_time:.1f}秒)"
                 self.log_error(self._last_error)
+                self._save_error_screenshot("login_timeout")
                 self._record_failure()
                 break
 
             if attempts >= max_attempts:
                 self._last_error = f"达到最大尝试次数 ({max_attempts})"
                 self.log_error(self._last_error)
+                self._save_error_screenshot("max_attempts_exceeded")
                 self._record_failure()
                 break
 
@@ -631,20 +675,41 @@ class AutoLoginTask(BaseJumpTask):
             if current_screen == self.LOADING_SCREEN:
                 # 加载界面 - 特殊处理，不增加尝试次数
                 action = self._handle_loading_screen
+                self._unknown_screen_count = 0  # 重置未知界面计数
             elif current_screen == self.CHARACTER_SELECTION_SCREEN:
                 # 角色选择界面 - 登录成功
                 self.log_info("检测到角色选择界面，登录成功")
                 self._logged_in = True
                 self._clear_failure()
+                self._unknown_screen_count = 0  # 重置未知界面计数
                 self.info_set('登录状态', '已登录')
                 return True
+            elif current_screen == self.LOGIN_SCREEN_EX:
+                # 快进按钮界面 - 点击跳过
+                action = self._handle_login_screen_ex
+                self._unknown_screen_count = 0  # 重置未知界面计数
             elif current_screen == self.LOGIN_SCREEN_0:
                 action = self._handle_login_screen_0
+                self._unknown_screen_count = 0  # 重置未知界面计数
             elif current_screen == self.LOGIN_SCREEN_1:
                 action = self._handle_login_screen_1
+                self._unknown_screen_count = 0  # 重置未知界面计数
             elif current_screen == self.LOGIN_SCREEN_2:
                 action = self._handle_login_screen_2
+                self._unknown_screen_count = 0  # 重置未知界面计数
             else:
+                # 未知界面检测
+                self._unknown_screen_count += 1
+                self.logger.warning(f"检测到未知界面 (连续第{self._unknown_screen_count}次)")
+                
+                if self._unknown_screen_count >= self.UNKNOWN_SCREEN_MAX_COUNT:
+                    error_msg = f"连续{self._unknown_screen_count}次检测到未知界面，登录流程终止"
+                    self._last_error = error_msg
+                    self.log_error(error_msg)
+                    self._save_error_screenshot("unknown_screen_limit")
+                    self._record_failure()
+                    break
+                
                 action = self._handle_unknown_screen
 
             if action == last_action and time.time() - last_action_time < click_wait:
@@ -776,36 +841,61 @@ class AutoLoginTask(BaseJumpTask):
     def _detect_login_screen(self):
         """
         检测当前界面类型
-        
+    
         检测优先级（从高到低）：
         1. 加载界面 - 最高优先级，避免其他检测干扰
         2. 角色选择界面 - 登录成功后的界面
-        3. 登录界面0（适龄提示）
-        4. 登录界面1（账户登录）
-        5. 登录界面2（开始游戏）
-        6. 未知界面
-        
+        3. 登录界面EX（快进按钮）- 优先于登录界面0
+        4. 登录界面0（适龄提示）
+        5. 登录界面1（账户登录）
+        6. 登录界面2（开始游戏）
+        7. 未知界面
+    
         Returns:
             str | None: 界面类型标识
         """
         # 优先检测加载界面（最高优先级）
         if self._check_loading_screen():
             return self.LOADING_SCREEN
-        
+    
         texts = self._get_ocr_texts()
-
+    
         # 检测角色选择界面（登录成功）
         if self._check_character_selection_screen(texts):
             return self.CHARACTER_SELECTION_SCREEN
-
+    
+        # 检测登录界面EX（快进按钮）- 优先于登录界面0
+        if self._check_login_screen_ex():
+            return self.LOGIN_SCREEN_EX
+    
         if self._check_login_screen_0(texts):
             return self.LOGIN_SCREEN_0
         elif self._check_login_screen_1(texts):
             return self.LOGIN_SCREEN_1
         elif self._check_login_screen_2(texts):
             return self.LOGIN_SCREEN_2
-        
+    
         return None
+
+    def _check_login_screen_ex(self):
+        """
+        检测是否为登录界面EX（快进按钮）
+
+        快进按钮通常位于屏幕右上角，用于跳过开场动画
+
+        Returns:
+            bool: True 如果检测到快进按钮
+        """
+        try:
+            # 使用模板匹配检测快进按钮
+            skip_button = self.find_one(Features.SKIP_BUTTON, threshold=0.55)
+            if skip_button:
+                self.log_debug("检测到快进按钮(特征匹配)")
+                return True
+        except ValueError:
+            pass
+
+        return False
 
     def _check_loading_screen(self):
         """
@@ -868,9 +958,12 @@ class AutoLoginTask(BaseJumpTask):
         if texts is None:
             texts = self._get_ocr_texts()
         if texts:
-            # 只需写简体中文，find_boxes会自动调用LangConverter转换为双语模式
-            has_age_prompt = self.find_boxes(texts, match=re.compile(r"适龄提示"))
+            # 匹配适龄提示文本（同时匹配简体和繁体）
+            # 简体: 适龄提示、年龄分级
+            # 繁体: 年齡分級
+            has_age_prompt = self.find_boxes(texts, match=re.compile(r"适龄提示|年龄分级|年齡分級"))
             has_enter_game = self.find_boxes(texts, match=re.compile(r"进入游戏"))
+            # 匹配协议同意文本
             has_agree = self.find_boxes(texts, match=re.compile(r"我已详细阅读并同意"))
 
             if has_age_prompt and has_enter_game and has_agree:
@@ -1157,6 +1250,23 @@ class AutoLoginTask(BaseJumpTask):
         except Exception as e:
             self.log_error(f"  恢复窗口失败: {e}")
 
+        return False
+
+    def _handle_login_screen_ex(self):
+        """处理登录界面EX - 快进按钮"""
+        self.log_info("处理登录界面EX - 点击快进按钮")
+
+        # 尝试点击快进按钮
+        try:
+            skip_button = self.find_one(Features.SKIP_BUTTON, threshold=0.55)
+            if skip_button:
+                self.log_info("找到快进按钮(特征)，点击...")
+                self.click(skip_button, after_sleep=1)
+                return True
+        except ValueError:
+            pass
+
+        self.logger.warning(f"[{self.name}] 未找到快进按钮")
         return False
 
     def _handle_login_screen_0(self):
@@ -1761,6 +1871,7 @@ class AutoLoginTask(BaseJumpTask):
         self._cached_ocr = None
         self._last_error = None
         self._account_input_done = False
+        self._unknown_screen_count = 0  # 重置未知界面计数
 
     # ==================== 问卷调查处理 ====================
 

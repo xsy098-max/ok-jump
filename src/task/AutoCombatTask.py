@@ -15,6 +15,8 @@
 
 import time
 import random
+import threading
+import re
 
 from ok import og
 
@@ -27,6 +29,7 @@ from src.combat import (
     DistanceCalculator,
 )
 from src.utils import background_manager
+from src.constants.features import Features
 
 
 class AutoCombatTask(BaseJumpTriggerTask):
@@ -36,6 +39,33 @@ class AutoCombatTask(BaseJumpTriggerTask):
     作为触发任务（TriggerTask）运行，在其他任务中调用
     实现完整的自动战斗逻辑
     """
+    
+    # 类变量：跟踪当前是否有自动战斗正在运行
+    _running_instance = None
+    _running_lock = threading.Lock()
+    
+    @classmethod
+    def is_running(cls):
+        """
+        检查是否有自动战斗正在运行
+        
+        Returns:
+            bool: True 如果有自动战斗实例正在运行
+        """
+        with cls._running_lock:
+            return cls._running_instance is not None
+    
+    @classmethod
+    def get_running_instance(cls):
+        """
+        获取当前运行的自动战斗实例
+        
+        Returns:
+            AutoCombatTask: 当前运行的实例，无则返回 None
+        """
+        with cls._running_lock:
+            return cls._running_instance
+    
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -80,13 +110,27 @@ class AutoCombatTask(BaseJumpTriggerTask):
         # 内部状态
         self._resolution_logged = False
         self._exit_requested = False
+        
+        # 战斗状态管理（非测试模式下使用）
+        self._combat_active = False  # 当前战斗是否激活
+        self._combat_thread = None  # 战斗执行线程
+        self._combat_lock = threading.Lock()  # 战斗状态锁
+        self._combat_check_interval = 0.5  # 战斗状态检测间隔（秒）
     
     def run(self):
         """
         运行自动战斗任务
         
         作为触发任务，会被其他任务调用
+        
+        根据测试模式决定运行方式：
+        - 测试模式开启：跳过场景检测，直接执行战斗循环
+        - 测试模式关闭：通过YOLO自身检测动态启停战斗
         """
+        # 注册运行实例
+        with self._running_lock:
+            AutoCombatTask._running_instance = self
+        
         self.logger.info("=" * 50)
         self.logger.info("自动战斗任务启动")
         self.logger.info("=" * 50)
@@ -95,10 +139,12 @@ class AutoCombatTask(BaseJumpTriggerTask):
         background_manager.update_config()
         self.logger.info(f"后台模式: {'启用' if background_manager.is_background_mode() else '禁用'}")
         
-        # 检查是否为测试模式（使用 self.config 获取用户实际设置的值）
+        # 检查是否为测试模式
         test_mode = self.config.get('测试模式', False)
         if test_mode:
-            self.logger.warning("测试模式已启用 - 跳过场景检测")
+            self.logger.warning("测试模式已启用 - 跳过场景检测，直接启动战斗")
+        else:
+            self.logger.info("正常模式已启用 - 通过YOLO自身检测动态启停战斗")
         
         # 更新分辨率
         self.update_resolution()
@@ -111,15 +157,6 @@ class AutoCombatTask(BaseJumpTriggerTask):
         
         self.check_and_warn_resolution()
         
-        # 等待进入游戏（测试模式下跳过）
-        if not test_mode:
-            self.logger.info("等待进入游戏...")
-            if not self._wait_for_game():
-                self.logger.error("未能进入游戏场景")
-                return False
-        else:
-            self.logger.info("测试模式：跳过等待游戏场景")
-        
         # 初始化控制器
         self._init_controllers()
         
@@ -127,9 +164,15 @@ class AutoCombatTask(BaseJumpTriggerTask):
         self.state_detector.start_death_monitor()
         self.logger.info("死亡状态监控线程已启动")
         
-        # 开始主循环
-        self.logger.info("开始自动战斗主循环")
-        self._main_loop()
+        if test_mode:
+            # 测试模式：跳过场景检测，直接进入主循环
+            self.logger.info("测试模式：跳过场景检测，直接启动战斗主循环")
+            self._main_loop()
+        else:
+            # 正常模式：通过YOLO自身检测动态启停战斗
+            self.logger.info("正常模式：启动战斗状态检测主循环")
+            self._state_aware_main_loop()
+        
         
         return True
     
@@ -184,19 +227,50 @@ class AutoCombatTask(BaseJumpTriggerTask):
         if self.config.get('测试模式', False):
             return False
         
-        # 检测是否还在游戏中
-        if not self.in_game():
-            return True
-        
+        # 非测试模式：不再使用 in_game() 检测，由状态感知主循环处理
         return False
     
     def request_exit(self):
         """请求退出自动战斗"""
         self._exit_requested = True
     
+    def _detect_battle_end(self):
+        """
+        检测战斗是否结束
+        
+        检测方式：
+        1. 模板匹配 fight_end.png
+        2. OCR 检测"对战结束"文字（简繁双语）
+        
+        Returns:
+            bool: True 如果检测到战斗结束
+        """
+        # 方法1: 模板匹配
+        try:
+            fight_end = self.find_one(Features.TUTORIAL_FIGHT_END, threshold=0.6)
+            if fight_end:
+                self.logger.info(f"[战斗结束检测] 检测到战斗结束标志(模板): ({fight_end.x}, {fight_end.y})")
+                return True
+        except (ValueError, Exception):
+            pass
+        
+        # 方法2: OCR检测"对战结束"（简繁双语）
+        try:
+            texts = self.ocr()
+            if texts:
+                pattern = re.compile(r"对战结束|對戰結束")
+                matched = self.find_boxes(texts, match=pattern)
+                if matched:
+                    self.logger.info(f"[战斗结束检测] OCR匹配到结束文字: '{matched[0].name}'")
+                    return True
+        except Exception as e:
+            self.logger.debug(f"[战斗结束检测] OCR异常: {e}")
+        
+        return False
+    
     def _main_loop(self):
         """
-        主循环 - 按照流程图执行
+        主循环 - 按照流程图执行（测试模式下使用）
         
         流程：
         1. 死亡状态检测（并行线程持续监控）
@@ -239,7 +313,17 @@ class AutoCombatTask(BaseJumpTriggerTask):
                 self_pos = self.state_detector.detect_self(timeout=15)
                 
                 if self_pos is None:
-                    self.logger.error("15秒未检测到自身位置，终止脚本")
+                    # 自身检测超时，可能是战斗已结束
+                    self.logger.warning("15秒未检测到自身位置")
+                    
+                    # 检测是否战斗结束
+                    if self._detect_battle_end():
+                        self.logger.info("检测到战斗结束标志，正常退出自动战斗")
+                        self._cleanup()
+                        return
+                    
+                    
+                    # 不是战斗结束，记录错误并退出
                     self._log_frame_info("自身检测失败")
                     raise Exception("自身检测超时 - 15秒内未找到自己")
                 
@@ -259,23 +343,199 @@ class AutoCombatTask(BaseJumpTriggerTask):
                     self._log_battlefield_details(state, self_pos, allies, enemies)
                 
                 # ======== 第四步：更新距离给技能控制器 ========
+                # 检测所有敌人，只要有一个在范围内就启动技能
                 if enemies:
-                    nearest_enemy = self._get_nearest_target(self_pos, enemies)
-                    if nearest_enemy:
-                        distance = self.distance_calc.calculate(self_pos, nearest_enemy)
-                        self.skill_ctrl.update_distance(distance)
+                    distance = self._get_skill_distance(self_pos, enemies)
+                    self.skill_ctrl.update_distance(distance)
                 
                 # 根据战场状态处理（传递已检测的单位信息）
                 self._handle_battlefield_state(state, self_pos, allies, enemies)
-                
-                # 不需要额外休息，让移动更平滑
-                # time.sleep(0.02)
                 
             except Exception as e:
                 self.logger.error(f"自动战斗异常: {e}")
                 self._log_frame_info("异常发生时")
                 self._cleanup()
                 raise
+    
+    def _state_aware_main_loop(self):
+        """
+        状态感知主循环 - 通过YOLO自身检测动态启停战斗（非测试模式下使用）
+        
+        流程：
+        1. 持续检测战斗状态（通过YOLO检测自身角色）
+        2. 检测到自身 -> 进入战斗状态 -> 启动战斗线程
+        3. 检测不到自身 -> 退出战斗状态 -> 停止战斗线程
+        4. 管理状态切换时的资源清理和初始化
+        """
+        verbose = self.config.get('详细日志', False)
+        self.logger.info("状态感知主循环已启动")
+        
+        while True:
+            if self._should_exit():
+                self.logger.info("检测到退出信号，停止状态感知主循环")
+                self._stop_combat_thread()
+                self._cleanup()
+                return
+            
+            # 后台模式：检查并自动伪最小化
+            background_manager.check_and_auto_pseudo_minimize()
+            
+            try:
+                # 检测战斗状态（通过YOLO自身检测）
+                in_combat, state_changed = self.state_detector.check_combat_state_by_self_detection()
+                
+                # 处理状态变化
+                if state_changed:
+                    if in_combat:
+                        # 进入战斗状态
+                        self.logger.info("=" * 40)
+                        self.logger.info("检测到进入战斗场景，启动自动战斗...")
+                        self.logger.info("=" * 40)
+                        self._start_combat_thread()
+                    else:
+                        # 退出战斗状态
+                        self.logger.info("=" * 40)
+                        self.logger.info("检测到退出战斗场景，停止自动战斗...")
+                        self.logger.info("=" * 40)
+                        self._stop_combat_thread()
+                
+                # 状态日志输出
+                if verbose and self._loop_count % 20 == 0:
+                    self.logger.info(f"状态感知循环: 战斗状态={'战斗中' if in_combat else '非战斗'}, "
+                                   f"战斗线程={'运行中' if self._combat_active else '已停止'}")
+                
+                self._loop_count += 1
+                
+                # 检测间隔
+                time.sleep(self._combat_check_interval)
+                
+            except Exception as e:
+                self.logger.error(f"状态感知主循环异常: {e}")
+                self._stop_combat_thread()
+                time.sleep(1)
+    
+    def _start_combat_thread(self):
+        """
+        启动战斗执行线程
+        
+        在独立的线程中运行战斗主循环
+        """
+        with self._combat_lock:
+            if self._combat_active:
+                self.logger.warning("战斗线程已在运行中")
+                return
+            
+            self._combat_active = True
+            self._combat_thread = threading.Thread(
+                target=self._combat_loop,
+                name="CombatLoopThread",
+                daemon=True
+            )
+            self._combat_thread.start()
+            self.logger.info("战斗执行线程已启动")
+    
+    def _stop_combat_thread(self):
+        """
+        停止战斗执行线程
+        
+        停止战斗循环并清理相关资源
+        """
+        # 先设置标志位（需要在锁外操作避免死锁）
+        with self._combat_lock:
+            if not self._combat_active:
+                return
+            self._combat_active = False
+        
+        # 停止技能和移动（在锁外操作）
+        if self.skill_ctrl:
+            self.skill_ctrl.stop_auto_skills()
+        if self.movement_ctrl:
+            self.movement_ctrl.stop()
+        
+        # 等待线程结束（在锁外操作，避免死锁）
+        if self._combat_thread and self._combat_thread.is_alive():
+            self._combat_thread.join(timeout=2.0)
+        
+        self.logger.info("战斗执行线程已停止")
+    
+    def _combat_loop(self):
+        """
+        战斗执行循环（在独立线程中运行）
+        
+        当检测到进入战斗状态时，执行此循环
+        """
+        verbose = self.config.get('详细日志', False)
+        self.logger.info("战斗执行循环开始")
+        
+        # 自身位置丢失计数器（连续多次丢失才检测战斗结束）
+        self_lost_count = 0
+        self_lost_threshold = 10  # 连续10次检测不到自身才检测战斗结束
+        
+        while self._is_combat_active() and not self._should_exit():
+            try:
+                # 检查死亡状态
+                if self.state_detector.is_death_detected():
+                    self.logger.warning("战斗中检测到死亡状态，等待复活...")
+                    self.skill_ctrl.stop_auto_skills()
+                    self.movement_ctrl.stop()
+                    time.sleep(1)
+                    continue
+                
+                # 更新帧（确保使用最新画面）
+                self.next_frame()
+                
+                # 检测自身位置
+                self_pos = self.state_detector.detect_self_once()
+                if self_pos is None:
+                    self_lost_count += 1
+                    
+                    # 连续多次丢失，检测战斗是否结束
+                    if self_lost_count >= self_lost_threshold:
+                        self.logger.info(f"连续{self_lost_count}次未检测到自身位置，检测战斗是否结束...")
+                        if self._detect_battle_end():
+                            self.logger.info("检测到战斗结束标志，设置退出标志")
+                            self._exit_requested = True
+                            break
+                    
+                    if verbose:
+                        self.logger.debug(f"战斗循环中自身位置丢失 ({self_lost_count}/{self_lost_threshold})")
+                    time.sleep(0.1)
+                    continue
+                
+                
+                # 重置丢失计数器
+                self_lost_count = 0
+                
+                # 检测战场状态
+                state, allies, enemies = self.state_detector.get_battlefield_state_detailed()
+                self._last_state = state.value
+                
+                # 更新距离（检测所有敌人）
+                if enemies:
+                    distance = self._get_skill_distance(self_pos, enemies)
+                    self.skill_ctrl.update_distance(distance)
+                
+                # 处理战场状态
+                self._handle_battlefield_state(state, self_pos, allies, enemies)
+                
+                # 短暂休眠
+                time.sleep(0.05)
+                
+            except Exception as e:
+                self.logger.error(f"战斗执行循环异常: {e}")
+                time.sleep(0.1)
+        
+        self.logger.info("战斗执行循环结束")
+    
+    def _is_combat_active(self):
+        """
+        线程安全地检查战斗是否激活
+        
+        Returns:
+            bool: 战斗是否激活
+        """
+        with self._combat_lock:
+            return self._combat_active
     
     def _log_frame_info(self, context=""):
         """记录当前帧信息"""
@@ -357,6 +617,49 @@ class AutoCombatTask(BaseJumpTriggerTask):
         
         return nearest
     
+    def _get_skill_distance(self, self_pos, enemies):
+        """
+        获取技能释放距离（检测所有敌人）
+        
+        逻辑：
+        1. 如果有任何一个敌人在技能范围内(0-225px)，返回该距离（优先）
+        2. 否则返回最近敌人的距离
+        
+        Args:
+            self_pos: 自身位置
+            enemies: 敌人列表
+            
+        Returns:
+            float: 用于技能控制的距离
+        """
+        if not enemies or self_pos is None:
+            return float('inf')
+        
+        # 技能范围
+        SKILL_RANGE_MIN = 0
+        SKILL_RANGE_MAX = 225
+        
+        nearest_distance = float('inf')
+        in_range_distance = None
+        
+        for enemy in enemies:
+            distance = self.distance_calc.calculate(self_pos, enemy)
+            
+            # 更新最近距离
+            if distance < nearest_distance:
+                nearest_distance = distance
+            
+            # 检查是否在技能范围内
+            if SKILL_RANGE_MIN <= distance <= SKILL_RANGE_MAX:
+                if in_range_distance is None or distance < in_range_distance:
+                    in_range_distance = distance
+        
+        
+        # 优先返回范围内的距离，否则返回最近距离
+        if in_range_distance is not None:
+            return in_range_distance
+        return nearest_distance
+    
     def _handle_no_units(self):
         """
         情况1：无友方、无敌军
@@ -389,6 +692,11 @@ class AutoCombatTask(BaseJumpTriggerTask):
         
         while time.time() - start_time < max_search_time:
             if self._should_exit():
+                return
+            
+            # 检查战斗是否仍在激活状态
+            if not self._is_combat_active():
+                self.logger.info("战斗已停止，退出随机移动搜索")
                 return
             
             # 更新帧
@@ -430,7 +738,7 @@ class AutoCombatTask(BaseJumpTriggerTask):
         """
         情况2：仅有友方、无敌军
         
-        向友方移动，保持距离0~250像素
+        向友方移动，保持距离0~225像素
         强制关闭自动技能
         
         Args:
@@ -454,6 +762,11 @@ class AutoCombatTask(BaseJumpTriggerTask):
         while time.time() - start_time < max_follow_time:
             # 检查退出信号
             if self._should_exit():
+                return
+            
+            # 检查战斗是否仍在激活状态
+            if not self._is_combat_active():
+                self.logger.info("战斗已停止，退出友方跟随模式")
                 return
             
             # 更新帧（获取最新画面）
@@ -507,12 +820,12 @@ class AutoCombatTask(BaseJumpTriggerTask):
         """
         情况3：仅有敌军、无友方
             
-        向敌军移动，保持距离0~250像素
+        向敌军移动，保持距离0~225像素
         技能释放由独立线程根据距离自动处理
         
         优化：
         - 移动过程中实时检测距离
-        - 一旦距离进入0-250px范围，立即中断移动
+        - 一旦距离进入0-225px范围，立即中断移动
         - 移动过程中持续更新帧和距离给技能控制器
             
         目标锁定机制：
@@ -552,6 +865,11 @@ class AutoCombatTask(BaseJumpTriggerTask):
         while time.time() - start_time < max_adjust_time:
             # 检查退出信号
             if self._should_exit():
+                return
+            
+            # 检查战斗是否仍在激活状态
+            if not self._is_combat_active():
+                self.logger.info("战斗已停止，退出敌军追踪模式")
                 return
                 
             # 更新帧（获取最新画面）
@@ -629,7 +947,7 @@ class AutoCombatTask(BaseJumpTriggerTask):
                 if keys:
                     # 使用可中断移动，在移动过程中实时检测距离
                     def should_stop_moving():
-                        """检测是否应该停止移动（距离进入0-250px范围）"""
+                        """检测是否应该停止移动（距离进入0-225px范围）"""
                         # 更新帧
                         self.next_frame()
                         
@@ -644,7 +962,7 @@ class AutoCombatTask(BaseJumpTriggerTask):
                                 # 更新距离给技能控制器
                                 self.skill_ctrl.update_distance(new_distance)
                                 
-                                # 如果距离进入0-250px范围，停止移动
+                                # 如果距离进入0-225px范围，停止移动
                                 if self.distance_calc.is_in_optimal_range(new_distance):
                                     self.logger.info(f"[移动中断] 距离达标({new_distance:.0f}px)")
                                     return True
@@ -678,7 +996,7 @@ class AutoCombatTask(BaseJumpTriggerTask):
         if direction == "towards":
             dx = target.center_x - self_pos.center_x
             dy = target.center_y - self_pos.center_y
-            self.logger.debug(f"距离{self.distance_calc.calculate(self_pos, target):.0f}px > 250px，靠近目标")
+            self.logger.debug(f"距离{self.distance_calc.calculate(self_pos, target):.0f}px > 225px，靠近目标")
         elif direction == "away":
             dx = self_pos.center_x - target.center_x
             dy = self_pos.center_y - target.center_y
@@ -700,7 +1018,7 @@ class AutoCombatTask(BaseJumpTriggerTask):
         """
         情况4：友方+敌军都存在
         
-        优先向敌军移动，保持距离0~250像素
+        优先向敌军移动，保持距离0~225像素
         距离达标后 → 自动技能持续释放
         
         Args:
@@ -715,11 +1033,11 @@ class AutoCombatTask(BaseJumpTriggerTask):
     
     def _maintain_distance(self, self_pos, target):
         """
-        统一距离逻辑：保持0~250像素距离
+        统一距离逻辑：保持0~225像素距离
         
-        1. 距离在0~250像素之间 → 停止移动，保持位置
+        1. 距离在0~225像素之间 → 停止移动，保持位置
         2. 距离 < 0像素 → 反向移动，远离目标（理论上不会发生）
-        3. 距离 > 250像素 → 正向移动，靠近目标
+        3. 距离 > 225像素 → 正向移动，靠近目标
         
         Args:
             self_pos: 自身位置
@@ -729,7 +1047,7 @@ class AutoCombatTask(BaseJumpTriggerTask):
         direction = self.distance_calc.get_movement_direction(self_pos, target, distance)
         
         if direction == "towards":
-            self.logger.info(f"➡️ 距离{distance:.0f}px > 250px，靠近目标")
+            self.logger.info(f"➡️ 距离{distance:.0f}px > 225px，靠近目标")
             self.movement_ctrl.move_towards(
                 target.center_x, target.center_y,
                 self_pos.center_x, self_pos.center_y
@@ -746,6 +1064,18 @@ class AutoCombatTask(BaseJumpTriggerTask):
     
     def _cleanup(self):
         """清理资源"""
+        # 清除运行实例
+        with self._running_lock:
+            if AutoCombatTask._running_instance is self:
+                AutoCombatTask._running_instance = None
+        
+        # 停止战斗线程（非测试模式下）
+        self._stop_combat_thread()
+        
+        # 重置战斗状态
+        if self.state_detector:
+            self.state_detector.reset_combat_state()
+        
         # 停止死亡监控线程
         if self.state_detector:
             self.state_detector.stop_death_monitor()
