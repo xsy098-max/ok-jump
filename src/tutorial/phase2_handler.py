@@ -469,22 +469,33 @@ class Phase2Handler:
     def _run_combat_with_end_detection(self) -> bool:
         """
         运行自动战斗，同时并行检测战斗结束
-        
+    
         如果GUI中已开启自动战斗，则跳过启动战斗线程，只进行战斗结束检测
-        
+        但需要确保GUI自动战斗已进入战斗执行状态（检测到自身）
+    
         Returns:
             bool: 是否成功
         """
         from src.task.AutoCombatTask import AutoCombatTask
-        
+    
         combat_timeout = self._cfg('第二阶段战斗超时(秒)', 210.0)
         gui_combat_running = AutoCombatTask.is_running()
-        
+    
         if gui_combat_running:
-            self._log("检测到GUI自动战斗已运行，跳过启动战斗线程")
-            self._log("将使用GUI的自动战斗，仅进行战斗结束检测")
-            # 不启动自己的战斗线程，直接进行结束检测
+            self._log("检测到GUI自动战斗已运行")
             self._combat_task = AutoCombatTask.get_running_instance()
+                
+            # 【关键修复】等待GUI自动战斗进入战斗执行状态
+            # GUI自动战斗使用状态感知主循环，需要检测到自身才会启动战斗线程
+            # 这里需要等待它真正进入战斗状态
+            if not self._wait_gui_combat_active(timeout=30.0):
+                self._log("GUI自动战斗未能在超时内进入战斗状态，启动自己的战斗线程")
+                gui_combat_running = False
+                # 启动自己的战斗线程
+                if not self._start_combat_thread():
+                    return False
+            else:
+                self._log("GUI自动战斗已进入战斗执行状态，仅进行战斗结束检测")
         else:
             self._log(f"启动自动战斗线程（超时: {combat_timeout}秒）...")
             # 启动自动战斗线程
@@ -510,9 +521,9 @@ class Phase2Handler:
         # 停止检测
         self._stop_end_detection()
         
-        # 只有当不是GUI自动战斗时才停止战斗线程
-        if not gui_combat_running:
-            self._stop_combat()
+        # 【关键修复】只停止自己启动的战斗实例，不影响 GUI 自动战斗触发器
+        # GUI 触发器由用户控制启停，第二阶段不应干预
+        self._stop_combat(stop_gui_combat=False)
         
         with self._combat_end_lock:
             if self._combat_end_detected:
@@ -568,6 +579,51 @@ class Phase2Handler:
         
         return default
     
+    def _wait_gui_combat_active(self, timeout: float = 30.0) -> bool:
+        """
+        等待GUI自动战斗进入战斗执行状态
+
+        GUI自动战斗使用状态感知主循环，需要通过YOLO检测到自身才会启动战斗线程。
+        此方法等待战斗线程真正启动。
+
+        Args:
+            timeout: 超时时间（秒）
+
+        Returns:
+            bool: 是否成功进入战斗状态
+        """
+        if self._combat_task is None:
+            return False
+
+        start_time = time.time()
+        check_count = 0
+
+        self._log(f"等待GUI自动战斗进入战斗执行状态（超时: {timeout}秒）...")
+
+        while time.time() - start_time < timeout:
+            if self._should_exit():
+                return False
+
+            check_count += 1
+
+            # 检查战斗线程是否激活
+            if hasattr(self._combat_task, '_is_combat_active'):
+                if self._combat_task._is_combat_active():
+                    self._log(f"GUI自动战斗已激活战斗线程（检查{check_count}次后确认）")
+                    return True
+
+            # 每5次检查输出一次状态
+            if check_count % 5 == 0:
+                elapsed = time.time() - start_time
+                self._log(f"等待中... 已检查{check_count}次, 耗时{elapsed:.1f}秒")
+
+            # 更新帧，让GUI自动战斗能够检测到自身
+            self.task.next_frame()
+            time.sleep(0.1)
+
+        self._log(f"等待超时，共检查{check_count}次")
+        return False
+
     def _start_combat_thread(self) -> bool:
         """启动自动战斗线程"""
         try:
@@ -617,39 +673,90 @@ class Phase2Handler:
             return False
     
     def _run_combat_task(self):
-        """在线程中运行自动战斗任务（使用 print 避免 I/O closed 错误）"""
+        """在线程中运行自动战斗任务"""
         try:
-            print("[Phase2CombatThread] 自动战斗开始运行")
+            self._log("[Phase2CombatThread] 自动战斗开始运行")
             self._combat_task.run()
-            print("[Phase2CombatThread] 自动战斗正常结束")
+            self._log("[Phase2CombatThread] 自动战斗正常结束")
         except Exception as e:
-            print(f"[Phase2CombatThread] 自动战斗异常: {e}")
+            self._log_error(f"[Phase2CombatThread] 自动战斗异常: {e}")
     
-    def _stop_combat(self):
-        """停止自动战斗"""
-        # 检查是否是自己启动的战斗线程
-        # 如果 _combat_thread 为 None，说明使用的是GUI的自动战斗，不应该停止
-        if not self._combat_thread:
-            self._log("使用GUI自动战斗，不停止外部战斗任务")
-            return
+    def _stop_combat(self, stop_gui_combat=False):
+        """停止自动战斗
         
-        if self._combat_task:
-            self._log("停止自动战斗...")
+        Args:
+            stop_gui_combat: 是否停止 GUI 自动战斗触发器（默认 False，不影响 GUI）
+        
+        注意：此方法默认只停止 phase2_handler 自己创建的战斗实例。
+        GUI 自动战斗触发器由用户控制，不应在第二阶段结束时关闭。
+        """
+        # 如果是自己启动的战斗线程，停止它
+        if self._combat_thread and self._combat_task:
+            self._log("停止自己启动的战斗线程...")
             self._combat_task._exit_requested = True
             
-            # 停止移动控制器
+            # 【关键修复】完整停止所有战斗相关组件
+            
+            # 1. 停止移动控制器
             if hasattr(self._combat_task, 'movement_ctrl') and self._combat_task.movement_ctrl:
                 self._combat_task.movement_ctrl.stop()
             
-            # 停止技能控制器
+            # 2. 完全关闭技能控制器（停止线程）
             if hasattr(self._combat_task, 'skill_ctrl') and self._combat_task.skill_ctrl:
-                self._combat_task.skill_ctrl.stop_auto_skills()
+                self._combat_task.skill_ctrl.shutdown()
+            
+            # 3. 重置战斗状态
+            if hasattr(self._combat_task, 'state_detector') and self._combat_task.state_detector:
+                self._combat_task.state_detector.reset_combat_state()
+            
+            # 4. 停止死亡监控线程
+            if hasattr(self._combat_task, 'state_detector') and self._combat_task.state_detector:
+                self._combat_task.state_detector.stop_death_monitor()
             
             # 等待线程结束
-            if self._combat_thread and self._combat_thread.is_alive():
+            if self._combat_thread.is_alive():
                 self._combat_thread.join(timeout=3.0)
             
-            self._log("自动战斗已停止")
+            self._log("自己启动的战斗线程已停止")
+        
+        
+        # 【重要】默认不停止 GUI 自动战斗触发器
+        # GUI 触发器由用户控制启停，第二阶段不应干预
+        # 只有在明确需要时（stop_gui_combat=True）才停止 GUI 触发器
+        # 这种情况极少见，通常只在程序退出时使用
+        if stop_gui_combat:
+            from src.task.AutoCombatTask import AutoCombatTask
+            gui_combat_task = AutoCombatTask.get_running_instance()
+            if gui_combat_task:
+                # 确认是 GUI 触发器，不是自己创建的实例
+                if gui_combat_task is not self._combat_task:
+                    self._log("停止 GUI 自动战斗触发器...")
+                    
+                    # 设置退出标志
+                    gui_combat_task._exit_requested = True
+                    
+                    # 停止战斗执行线程
+                    if hasattr(gui_combat_task, '_stop_combat_thread'):
+                        gui_combat_task._stop_combat_thread()
+                    
+                    # 停止移动控制器
+                    if hasattr(gui_combat_task, 'movement_ctrl') and gui_combat_task.movement_ctrl:
+                        gui_combat_task.movement_ctrl.stop()
+                    
+                    # 关闭技能控制器
+                    if hasattr(gui_combat_task, 'skill_ctrl') and gui_combat_task.skill_ctrl:
+                        gui_combat_task.skill_ctrl.shutdown()
+                    
+                    # 重置战斗状态
+                    if hasattr(gui_combat_task, 'state_detector') and gui_combat_task.state_detector:
+                        gui_combat_task.state_detector.reset_combat_state()
+                    
+                    # 停止死亡监控
+                    if hasattr(gui_combat_task, 'state_detector') and gui_combat_task.state_detector:
+                        gui_combat_task.state_detector.stop_death_monitor()
+                    
+                    
+                    self._log("GUI 自动战斗触发器已停止")
     
     def _start_end_detection_thread(self, timeout: float):
         """启动结束检测线程"""
@@ -677,11 +784,11 @@ class Phase2Handler:
         start_time = time.time()
         check_count = 0
         
-        print(f"[结束检测] 线程开始运行，超时: {timeout}秒")
+        self._log(f"[结束检测] 线程开始运行，超时: {timeout}秒")
         
         while time.time() - start_time < timeout:
             if not self._end_detection_running:
-                print("[结束检测] 检测被停止")
+                self._log("[结束检测] 检测被停止")
                 return
             
             check_count += 1
@@ -689,19 +796,19 @@ class Phase2Handler:
             # 每20次循环输出一次状态
             if check_count % 20 == 0:
                 elapsed = time.time() - start_time
-                print(f"[结束检测] 已运行 {elapsed:.1f}秒，检测次数: {check_count}")
+                self._log(f"[结束检测] 已运行 {elapsed:.1f}秒，检测次数: {check_count}")
             
             try:
                 self.task.next_frame()
             except Exception as e:
                 if check_count % 20 == 0:
-                    print(f"[结束检测] next_frame异常: {e}")
+                    self._log(f"[结束检测] next_frame异常: {e}")
             
             # 方法1: 模板匹配 fight_end.png
             try:
                 fight_end = self.task.find_one(Features.TUTORIAL_FIGHT_END, threshold=0.6)
                 if fight_end:
-                    print(f"[结束检测] 检测到战斗结束标志(模板): ({fight_end.x}, {fight_end.y})")
+                    self._log(f"[结束检测] 检测到战斗结束标志(模板): ({fight_end.x}, {fight_end.y})")
                     with self._combat_end_lock:
                         self._combat_end_detected = True
                     return
@@ -719,17 +826,45 @@ class Phase2Handler:
                     for pattern in patterns:
                         matched = self.task.find_boxes(texts, match=pattern)
                         if matched:
-                            print(f"[结束检测] OCR匹配到结束文字: '{matched[0].name}'")
+                            self._log(f"[结束检测] OCR匹配到结束文字: '{matched[0].name}'")
                             with self._combat_end_lock:
                                 self._combat_end_detected = True
                             return
             except Exception as e:
                 if check_count % 20 == 0:
-                    print(f"[结束检测] OCR异常: {e}")
+                    self._log(f"[结束检测] OCR异常: {e}")
+            
+            # ========== 容错机制：检测 MVP 场景 ==========
+            # 如果检测到 MVP 场景元素，说明战斗已经结束，游戏进入了结算流程
+            try:
+                # 容错1: 模板匹配 MVP 退出按钮 (out.png)
+                mvp_out = self.task.find_one(Features.TUTORIAL_MVP_OUT, threshold=0.6)
+                if mvp_out:
+                    self._log(f"[结束检测-容错] 检测到MVP场景元素(模板out.png): ({mvp_out.x}, {mvp_out.y})")
+                    with self._combat_end_lock:
+                        self._combat_end_detected = True
+                    return
+            except (ValueError, Exception):
+                pass
+            
+            try:
+                # 容错2: OCR检测"点击荧幕退出" / "點擊螢幕退出"
+                mvp_pattern = re.compile(r"点击荧幕退出|點擊螢幕退出")
+                texts = self.task.ocr()
+                if texts:
+                    mvp_matched = self.task.find_boxes(texts, match=mvp_pattern)
+                    if mvp_matched:
+                        self._log(f"[结束检测-容错] OCR匹配到MVP场景文字: '{mvp_matched[0].name}'")
+                        with self._combat_end_lock:
+                            self._combat_end_detected = True
+                        return
+            except Exception as e:
+                if check_count % 20 == 0:
+                    self._log(f"[结束检测] MVP容错检测异常: {e}")
             
             time.sleep(0.1)
         
-        print(f"[结束检测] 检测超时，共检测 {check_count} 次")
+        self._log(f"[结束检测] 检测超时，共检测 {check_count} 次")
     
     # ==================== 步骤 2.6: MVP场景处理 ====================
     
@@ -756,17 +891,66 @@ class Phase2Handler:
         
         self._log("第一次MVP点击成功，等待中间加载界面...")
         
-        # 中间加载界面
+        # 中间加载界面（带容错检测）
         self.detector.reset_loading_state()
         
-        # 等待加载开始
-        if self.detector.detect_loading_start(timeout=10.0):
-            self._log("中间加载界面开始...")
-            if not self.detector.detect_loading_end(timeout=120.0, stuck_timeout=60.0):
-                self._log_error("中间加载界面超时")
-                self._save_error_screenshot("mvp_loading_timeout")
+        # 【容错机制】在等待加载界面的同时检测下一个界面
+        # 如果检测到第二次MVP场景或新英雄场景，跳过加载等待
+        loading_start = time.time()
+        loading_started = False
+        
+        # 先尝试检测加载界面开始（最多10秒）
+        while time.time() - loading_start < 10.0:
+            if self._should_exit():
                 return False
-            self._log("中间加载界面结束")
+            
+            self.task.next_frame()
+            
+            # 容错：检测第二次MVP场景（点击荧幕继续）
+            if self._check_mvp_out2():
+                self._log("[容错] 检测到第二次MVP场景，跳过中间加载等待")
+                break
+            
+            # 容错：检测新英雄场景
+            if self._check_new_hero_scene():
+                self._log("[容错] 检测到新英雄场景，跳过中间加载等待")
+                break
+            
+            # 检测加载界面开始
+            if self.detector.detect_loading_start(timeout=1.0):
+                loading_started = True
+                break
+            
+            time.sleep(0.2)
+        
+        
+        if loading_started:
+            self._log("中间加载界面开始...")
+            
+            # 等待加载结束（带容错检测）
+            loading_end_start = time.time()
+            while time.time() - loading_end_start < 120.0:
+                if self._should_exit():
+                    return False
+                
+                self.task.next_frame()
+                
+                # 容错：检测第二次MVP场景
+                if self._check_mvp_out2():
+                    self._log("[容错] 加载期间检测到第二次MVP场景，跳过剩余加载等待")
+                    break
+                
+                # 容错：检测新英雄场景
+                if self._check_new_hero_scene():
+                    self._log("[容错] 加载期间检测到新英雄场景，跳过剩余加载等待")
+                    break
+                
+                # 检测加载结束
+                if self.detector.detect_loading_end(timeout=5.0, stuck_timeout=60.0):
+                    self._log("中间加载界面结束")
+                    break
+                
+                time.sleep(0.3)
         else:
             self._log("未检测到中间加载界面，直接进行第二次检测...")
         
@@ -867,6 +1051,52 @@ class Phase2Handler:
         
         # 超时总结日志
         self._log_error(f"MVP检测超时: {timeout}秒内共检测{check_count}次均未匹配")
+        return False
+    
+    def _check_mvp_out2(self) -> bool:
+        """
+        检测第二次MVP场景（点击荧幕继续）
+        
+        用于容错机制：在中间加载界面等待时检测下一个界面
+        
+        Returns:
+            bool: 是否检测到第二次MVP场景
+        """
+        # 模板匹配 out2.png
+        try:
+            mvp_out2 = self.task.find_one(Features.TUTORIAL_MVP_OUT2, threshold=0.6)
+            if mvp_out2:
+                return True
+        except (ValueError, Exception):
+            pass
+        
+        # OCR检测"点击荧幕继续" / "點擊螢幕繼續"
+        if self._detect_text_bilingual("点击荧幕继续", "點擊螢幕繼續"):
+            return True
+        
+        return False
+    
+    def _check_new_hero_scene(self) -> bool:
+        """
+        检测新英雄场景
+        
+        用于容错机制：在加载界面等待时检测下一个界面
+        
+        Returns:
+            bool: 是否检测到新英雄场景
+        """
+        # 模板匹配 new_hero.png
+        try:
+            new_hero = self.task.find_one(Features.TUTORIAL_NEW_HERO, threshold=0.6)
+            if new_hero:
+                return True
+        except (ValueError, Exception):
+            pass
+        
+        # OCR检测"新英雄"
+        if self._detect_text_bilingual("新英雄", "新英雄"):
+            return True
+        
         return False
     
     # ==================== 步骤 2.7: 新英雄场景处理 ====================

@@ -44,6 +44,10 @@ class AutoCombatTask(BaseJumpTriggerTask):
     _running_instance = None
     _running_lock = threading.Lock()
     
+    # 类变量：暂停标志（用于新手教程第一阶段暂停 GUI 触发器）
+    _paused_by_tutorial = False
+    _paused_lock = threading.Lock()
+    
     @classmethod
     def is_running(cls):
         """
@@ -66,14 +70,84 @@ class AutoCombatTask(BaseJumpTriggerTask):
         with cls._running_lock:
             return cls._running_instance
     
+    @classmethod
+    def pause_for_tutorial(cls):
+        """
+        暂停 GUI 自动战斗触发器（用于新手教程第一阶段）
+        
+        不使用 disable() 以避免触发框架异常
+        """
+        with cls._paused_lock:
+            cls._paused_by_tutorial = True
+    
+    @classmethod
+    def resume_from_tutorial(cls):
+        """
+        恢复 GUI 自动战斗触发器（新手教程第一阶段结束后）
+        """
+        with cls._paused_lock:
+            cls._paused_by_tutorial = False
+    
+    @classmethod
+    def is_paused_by_tutorial(cls) -> bool:
+        """
+        检查是否被新手教程暂停
+        
+        Returns:
+            bool: 是否被暂停
+        """
+        with cls._paused_lock:
+            return cls._paused_by_tutorial
+    
+    @classmethod
+    def reset_class_state(cls):
+        """
+        重置所有类变量状态
+        
+        此方法在 CITestTask 任务开始时调用，确保多次执行时环境隔离。
+        清除上次任务可能残留的状态。
+        """
+        # 清除运行实例
+        with cls._running_lock:
+            cls._running_instance = None
+        
+        # 清除暂停标志
+        with cls._paused_lock:
+            cls._paused_by_tutorial = False
+        
+    @classmethod
+    def reset_combat_instance(cls):
+        """
+        重置当前运行的战斗实例
+        
+        如果有正在运行的自动战斗实例，强制停止并清除。
+        此方法比 reset_class_state 更彻底，会停止正在进行的战斗。
+        """
+        with cls._running_lock:
+            if cls._running_instance is not None:
+                instance = cls._running_instance
+                # 设置退出标志
+                if hasattr(instance, '_exit_requested'):
+                    instance._exit_requested = True
+                # 停止战斗线程
+                if hasattr(instance, '_stop_combat_thread'):
+                    instance._stop_combat_thread()
+                # 清除引用
+                cls._running_instance = None
+        
+        # 清除暂停标志
+        with cls._paused_lock:
+            cls._paused_by_tutorial = False
+    
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.name = "AutoCombatTask"
         self.description = "自动战斗 - 智能战斗辅助"
-        
+
         # 配置选项（技能开关和间隔）
-        self.default_config = {
+        # 使用 update 方法添加配置，保留父类 TriggerTask 设置的 _enabled 键
+        self.default_config.update({
             '测试模式': False,  # 测试模式：跳过场景检测，直接启动战斗
             '详细日志': True,   # 输出详细的调试日志
             '自动普攻': True,
@@ -85,7 +159,7 @@ class AutoCombatTask(BaseJumpTriggerTask):
             '技能2间隔(秒)': 3.0,
             '大招间隔(秒)': 5.0,
             '移动持续时间(秒)': 0.5,  # 每次移动按键持续的时间
-        }
+        })
         
         self.config_description = {
             '测试模式': '启用后跳过场景检测，直接启动战斗逻辑（用于调试）',
@@ -116,6 +190,11 @@ class AutoCombatTask(BaseJumpTriggerTask):
         self._combat_thread = None  # 战斗执行线程
         self._combat_lock = threading.Lock()  # 战斗状态锁
         self._combat_check_interval = 0.5  # 战斗状态检测间隔（秒）
+        
+        # 卡住/抖动检测相关
+        self._position_history = []  # 存储最近的位置 (x, y)
+        self._position_history_max = 8  # 最多记录8个位置（抖动检测需要）
+        self._last_enemy_pos = None  # 敌人最后位置 (x, y, timestamp)
     
     def run(self):
         """
@@ -127,6 +206,13 @@ class AutoCombatTask(BaseJumpTriggerTask):
         - 测试模式开启：跳过场景检测，直接执行战斗循环
         - 测试模式关闭：通过YOLO自身检测动态启停战斗
         """
+        # 重置退出标志（触发器实例复用时需要重置）
+        self._exit_requested = False
+        
+        # 清空位置历史（避免残留数据影响卡住/抖动检测）
+        self._position_history.clear()
+        self._last_enemy_pos = None
+        
         # 注册运行实例
         with self._running_lock:
             AutoCombatTask._running_instance = self
@@ -280,6 +366,12 @@ class AutoCombatTask(BaseJumpTriggerTask):
         """
         verbose = self.config.get('详细日志', False)
         
+        # 【关键修复】测试模式下设置战斗激活状态
+        # 否则 _handle_no_units() 等函数会立即退出
+        with self._combat_lock:
+            self._combat_active = True
+        self.logger.info("测试模式：战斗激活状态已设置")
+        
         while True:
             self._loop_count += 1
             
@@ -376,6 +468,14 @@ class AutoCombatTask(BaseJumpTriggerTask):
                 self._stop_combat_thread()
                 self._cleanup()
                 return
+            
+            # 检查是否被新手教程暂停
+            if self.is_paused_by_tutorial():
+                # 被暂停时跳过战斗检测，等待恢复
+                if self._combat_active:
+                    self._stop_combat_thread()
+                time.sleep(self._combat_check_interval)
+                continue
             
             # 后台模式：检查并自动伪最小化
             background_manager.check_and_auto_pseudo_minimize()
@@ -514,6 +614,26 @@ class AutoCombatTask(BaseJumpTriggerTask):
                 if enemies:
                     distance = self._get_skill_distance(self_pos, enemies)
                     self.skill_ctrl.update_distance(distance)
+                    # 记录敌人最后位置
+                    nearest_enemy = self._get_nearest_target(self_pos, enemies)
+                    if nearest_enemy:
+                        self._last_enemy_pos = (nearest_enemy.center_x, nearest_enemy.center_y, time.time())
+                
+                
+                # 【卡住/抖动检测】只有在没有敌人在技能范围内时才执行
+                has_enemy_in_range = False
+                if enemies:
+                    distance = self._get_skill_distance(self_pos, enemies)
+                    if distance <= 225:  # 技能范围 0-225px
+                        has_enemy_in_range = True
+                
+                if not has_enemy_in_range:
+                    # 执行卡住/抖动检测
+                    if self._handle_stuck_or_jitter(self_pos):
+                        # 执行了摆脱操作，继续下一次循环
+                        time.sleep(0.1)
+                        continue
+                
                 
                 # 处理战场状态
                 self._handle_battlefield_state(state, self_pos, allies, enemies)
@@ -1061,6 +1181,159 @@ class AutoCombatTask(BaseJumpTriggerTask):
         else:
             self.logger.info(f"⏹️ 距离{distance:.0f}px 在最佳范围内，停止移动")
             self.movement_ctrl.stop()
+    
+    def _record_position(self, x: float, y: float):
+        """
+        记录位置历史，用于卡住/抖动检测
+        
+        Args:
+            x, y: 自身位置坐标
+        """
+        self._position_history.append((x, y))
+        if len(self._position_history) > self._position_history_max:
+            self._position_history.pop(0)
+    
+    def _detect_stuck(self) -> bool:
+        """
+        检测角色是否被卡住（连续4次检测到相同坐标）
+        
+        检测逻辑：
+        - 如果最近4个位置都在10像素范围内，认为角色被卡住
+        - 每次触发后清空历史，允许再次检测
+        
+        Returns:
+            bool: 如果检测到卡住返回 True
+        """
+        STUCK_THRESHOLD = 10  # 10像素内视为同一位置
+        STUCK_COUNT = 4  # 连续4次
+        
+        if len(self._position_history) < STUCK_COUNT:
+            return False
+        
+        # 获取最近4个位置
+        recent_positions = self._position_history[-STUCK_COUNT:]
+        
+        # 计算这4个位置的平均中心点
+        avg_x = sum(p[0] for p in recent_positions) / STUCK_COUNT
+        avg_y = sum(p[1] for p in recent_positions) / STUCK_COUNT
+        
+        # 检查所有位置是否都在阈值范围内
+        all_same = all(
+            ((p[0] - avg_x) ** 2 + (p[1] - avg_y) ** 2) ** 0.5 < STUCK_THRESHOLD
+            for p in recent_positions
+        )
+        
+        if all_same:
+            positions_str = " -> ".join([f"({x:.0f},{y:.0f})" for x, y in recent_positions])
+            self.logger.info(f"【卡住检测】连续{STUCK_COUNT}次相同坐标: {positions_str}")
+        
+        return all_same
+    
+    def _detect_jitter(self) -> bool:
+        """
+        检测是否存在A-B-A-B抖动模式
+        
+        将历史位置分为偶数组和奇数组：
+        - 偶数位置 (0,2,4,6) 形成A区域
+        - 奇数位置 (1,3,5,7) 形成B区域
+        
+        如果A区域聚类、B区域聚类，且两个区域中心距离较远，判定为抖动
+        
+        Returns:
+            bool: 如果检测到抖动返回 True
+        """
+        JITTER_THRESHOLD = 15  # 聚类阈值：15像素内视为聚类
+        AREA_THRESHOLD = 30  # 区域阈值：两个区域中心距离超过30像素才算抖动
+        MIN_HISTORY = 6  # 至少需要6个位置
+        
+        if len(self._position_history) < MIN_HISTORY:
+            return False
+        
+        # 分离偶数位置和奇数位置
+        even_positions = [self._position_history[i] for i in range(0, len(self._position_history), 2)]
+        odd_positions = [self._position_history[i] for i in range(1, len(self._position_history), 2)]
+        
+        if len(even_positions) < 2 or len(odd_positions) < 2:
+            return False
+        
+        # 计算偶数位置中心（A区域）
+        even_center_x = sum(p[0] for p in even_positions) / len(even_positions)
+        even_center_y = sum(p[1] for p in even_positions) / len(even_positions)
+        
+        # 计算奇数位置中心（B区域）
+        odd_center_x = sum(p[0] for p in odd_positions) / len(odd_positions)
+        odd_center_y = sum(p[1] for p in odd_positions) / len(odd_positions)
+        
+        # 检查偶数位置是否聚类（都在中心附近）
+        even_clustered = all(
+            ((p[0] - even_center_x) ** 2 + (p[1] - even_center_y) ** 2) ** 0.5 < JITTER_THRESHOLD
+            for p in even_positions
+        )
+        
+        # 检查奇数位置是否聚类（都在中心附近）
+        odd_clustered = all(
+            ((p[0] - odd_center_x) ** 2 + (p[1] - odd_center_y) ** 2) ** 0.5 < JITTER_THRESHOLD
+            for p in odd_positions
+        )
+        
+        # 检查A区域和B区域是否不同（有足够的距离）
+        distance_between_areas = ((even_center_x - odd_center_x) ** 2 + (even_center_y - odd_center_y) ** 2) ** 0.5
+        areas_are_different = distance_between_areas > AREA_THRESHOLD
+        
+        # 只有当偶数位置聚类、奇数位置聚类，且两个区域不同时，才判定为抖动
+        is_jitter = even_clustered and odd_clustered and areas_are_different
+        if is_jitter:
+            self.logger.info(f"【抖动检测】✓ 检测到抖动! A区域({even_center_x:.0f},{even_center_y:.0f}), B区域({odd_center_x:.0f},{odd_center_y:.0f}), 距离{distance_between_areas:.0f}px")
+        
+        return is_jitter
+    
+    def _perform_random_move(self):
+        """
+        执行随机移动，用于摆脱卡住或抖动
+        """
+        random.seed()  # 重置随机种子确保每次都是真正随机
+        
+        # 随机选择一个方向移动2秒
+        directions = [
+            (['W'], 3), (['S'], 2), (['A'], 2), (['D'], 2),
+            (['W', 'A'], 2), (['W', 'D'], 2), (['S', 'A'], 1), (['S', 'D'], 1),
+        ]
+        weights = [w for _, w in directions]
+        keys = random.choices([d[0] for d in directions], weights=weights, k=1)[0]
+        
+        self.logger.info(f"【随机移动】方向: {'+'.join(keys)}, 持续2秒 (权重随机)")
+        self.movement_ctrl._press_movement_keys_for_duration(keys, 2.0)
+    
+    def _handle_stuck_or_jitter(self, self_pos):
+        """
+        处理卡住或抖动情况
+        
+        Args:
+            self_pos: 当前自身位置
+            
+        Returns:
+            bool: 如果执行了摆脱操作返回 True
+        """
+        # 记录当前位置
+        self._record_position(self_pos.center_x, self_pos.center_y)
+        
+        # 卡住检测
+        is_stuck = self._detect_stuck()
+        if is_stuck:
+            self.logger.info("【卡住检测】角色可能被卡住，向下移动1秒")
+            self.movement_ctrl._press_movement_keys_for_duration(['S'], 1.0)
+            self._position_history.clear()
+            return True
+        
+        # 抖动检测
+        is_jitter = self._detect_jitter()
+        if is_jitter:
+            self._perform_random_move()
+            self._position_history.clear()
+            return True
+        
+        return False
+    
     
     def _cleanup(self):
         """清理资源"""

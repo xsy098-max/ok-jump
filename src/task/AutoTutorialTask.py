@@ -124,30 +124,36 @@ class AutoTutorialTask(BaseJumpTask):
     def _run_single_character(self, character: str) -> bool:
         """
         执行单个角色的新手教程
-        
+            
         Args:
             character: 角色名称
-            
+                
         Returns:
             bool: 是否成功完成
         """
         self.logger.info(f"开始执行角色 '{character}' 的新手教程")
-        
+            
+        # ========== 禁用 GUI 自动战斗触发器（避免与第一阶段冲突）==========
+        gui_combat_enabled = self._disable_gui_combat_trigger()
+            
         # ========== 第一阶段 ==========
         # 创建第一阶段处理器
         self._phase1_handler = Phase1Handler(self)
         self._phase1_handler.initialize(character)
-        
+            
         # 运行第一阶段
         phase1_success = self._phase1_handler.run()
-        
+            
+        # ========== 第一阶段结束后恢复 GUI 自动战斗触发器 ==========
+        self._restore_gui_combat_trigger(gui_combat_enabled)
+            
         if not phase1_success:
             reason = self._phase1_handler.state_machine.failure_reason
             self.logger.error(f"角色 '{character}' 新手教程第一阶段失败: {reason}")
             self._save_error_screenshot(f"{character}_tutorial_failed")
             self._phase1_handler.cleanup()
             return False
-        
+            
         self.logger.info(f"角色 '{character}' 新手教程第一阶段完成")
         
         # ========== 第二阶段 ==========
@@ -295,8 +301,58 @@ class AutoTutorialTask(BaseJumpTask):
     def get_completed_characters(self) -> list:
         """
         获取已完成的角色列表
-        
+            
         Returns:
             list: 已完成的角色名称列表
         """
         return self._completed_characters.copy()
+        
+    def _disable_gui_combat_trigger(self) -> bool:
+        """
+        暂停 GUI 自动战斗触发器
+                
+        第一阶段使用独立的战斗逻辑，需要暂停 GUI 触发器以避免冲突。
+        使用暂停机制而不是 disable() 以避免触发框架异常。
+                
+        Returns:
+            bool: 触发器是否原本处于启用状态
+        """
+        from src.task.AutoCombatTask import AutoCombatTask
+                
+        was_enabled = False
+                
+    
+        try:
+            # 检查 GUI 自动战斗触发器是否启用
+            if hasattr(og, 'executor') and og.executor:
+                for task in og.executor.trigger_tasks:
+                    if isinstance(task, AutoCombatTask):
+                        was_enabled = task.enabled
+                        if was_enabled:
+                            self.logger.info("[新手教程] 暂停 GUI 自动战斗触发器（第一阶段使用独立战斗逻辑）")
+                            AutoCombatTask.pause_for_tutorial()
+                        break
+        except Exception as e:
+            self.logger.warning(f"[新手教程] 暂停 GUI 自动战斗触发器失败: {e}")
+                
+        return was_enabled
+            
+    def _restore_gui_combat_trigger(self, was_enabled: bool):
+        """
+        恢复 GUI 自动战斗触发器的状态
+                
+        Args:
+            was_enabled: 触发器原本是否处于启用状态
+        """
+        from src.task.AutoCombatTask import AutoCombatTask
+                
+        if not was_enabled:
+            # 原本就是禁用状态，无需恢复
+            return
+                
+        try:
+            self.logger.info("[新手教程] 恢复 GUI 自动战斗触发器")
+            AutoCombatTask.resume_from_tutorial()
+        except Exception as e:
+            self.logger.warning(f"[新手教程] 恢复 GUI 自动战斗触发器失败: {e}")
+    

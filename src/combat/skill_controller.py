@@ -154,11 +154,7 @@ class SkillController:
             if not hasattr(self.task, 'is_adb'):
                 return False
             
-            # 检查 executor 是否存在
-            if hasattr(self.task, 'executor') and self.task.executor is None:
-                return False
-            
-            # 调用 is_adb 方法
+            # 调用 is_adb 方法（mixins.py 中已有备用检测逻辑）
             result = self.task.is_adb()
             
             # 确保返回值是布尔类型

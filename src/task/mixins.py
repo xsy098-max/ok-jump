@@ -404,11 +404,34 @@ class JumpTaskMixin:
         """
         try:
             from ok.device.intercation import ADBInteraction
-            if hasattr(self, 'executor') and hasattr(self.executor, 'interaction'):
-                interaction = self.executor.interaction
-                return isinstance(interaction, ADBInteraction)
-        except Exception:
-            pass
+            from ok import og
+
+            # 方法1：检查 executor.interaction 是否为 ADBInteraction
+            if hasattr(self, 'executor') and self.executor is not None:
+                if hasattr(self.executor, 'interaction') and self.executor.interaction is not None:
+                    interaction = self.executor.interaction
+                    if isinstance(interaction, ADBInteraction):
+                        return True
+
+            # 方法2（备用）：检查全局设备管理器的设备类型
+            if og is not None and hasattr(og, 'device_manager') and og.device_manager is not None:
+                dm = og.device_manager
+                # 检查是否有 ADB 设备连接
+                if hasattr(dm, 'device') and dm.device is not None:
+                    return True
+                # 检查当前捕获方式是否为 ADB
+                if hasattr(dm, 'config') and dm.config.get('capture') == 'adb':
+                    return True
+                # 检查是否有 adb 配置且没有 hwnd_window
+                if dm.adb_capture_config and not dm.hwnd_window:
+                    return True
+
+        except Exception as e:
+            # 记录异常以便调试
+            try:
+                self.logger.debug(f"_is_adb_interaction 检测异常: {e}")
+            except Exception:
+                pass
         return False
 
     def is_adb(self):
@@ -497,11 +520,14 @@ class JumpTaskMixin:
             duration: 滑动持续时间
             after_sleep: 滑动后等待时间
         """
-        if self._is_adb_interaction():
+        is_adb = self._is_adb_interaction()
+        if is_adb:
             # ADB 模式：使用框架的 swipe（通过 ADB 命令）
+            self.logger.debug(f"[swipe] ADB模式: ({from_x},{from_y}) -> ({to_x},{to_y}), 持续{duration}秒")
             return super().swipe(from_x, from_y, to_x, to_y, duration, after_sleep=after_sleep)
         else:
             # Windows 模式：使用后台输入助手的拖拽
+            self.logger.debug(f"[swipe] Windows模式: ({from_x},{from_y}) -> ({to_x},{to_y}), 持续{duration}秒")
             if self._need_background_click():
                 self._init_background_input()
                 return background_input.drag(from_x, from_y, to_x, to_y, duration=duration)

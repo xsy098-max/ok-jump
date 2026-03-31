@@ -342,16 +342,16 @@ class Phase1Handler:
             # 获取角色配置，判断角色类型
             config = self.character_selector.get_current_config()
             if config and config.target_type == 'monkey':
-                # 悟空角色：检测到自身后等待10秒，然后向左上移动2.5秒
+                # 悟空角色：检测到自身后等待10秒，然后向左上移动3秒
                 self._log("悟空角色：等待10秒后向左上移动...")
                 time.sleep(10.0)
-                self._log("悟空角色：开始向左上移动2.5秒...")
+                self._log("悟空角色：开始向左上移动3秒...")
                 # 使用MovementController确保后台模式兼容
                 # 使用KEY_UP和KEY_LEFT常量确保键名正确
                 self.movement_ctrl._press_movement_keys_for_duration(
-                    [self.movement_ctrl.KEY_UP, self.movement_ctrl.KEY_LEFT], 2.5
+                    [self.movement_ctrl.KEY_UP, self.movement_ctrl.KEY_LEFT], 3.0
                 )
-                self._log("悟空角色：左上移动2.5秒完成，进入普攻按钮检测")
+                self._log("悟空角色：左上移动3秒完成，进入普攻按钮检测")
                 self.state_machine.transition_to(TutorialState.NORMAL_ATTACK_DETECTION)
             else:
                 # 路飞/小鸣人：保持原有流程，进入目标检测
@@ -644,6 +644,8 @@ class Phase1Handler:
         
         同时运行自动战斗和第一阶段结束检测，
         检测到 end01.png 和 end02.png 后直接进入 PHASE1_END。
+        
+        注意：第一阶段使用独立的战斗逻辑，不使用 GUI 自动战斗触发器。
         """
         self._log("新手教程第一阶段完成，启动自动战斗...")
         
@@ -761,36 +763,45 @@ class Phase1Handler:
                 # 【抖动检测】记录当前位置
                 self._record_position(self_pos.center_x, self_pos.center_y)
                 
-                # 【卡住检测】检测是否连续4次在同一坐标（角色被卡住）
-                is_stuck = self._detect_stuck()
-                if is_stuck:
-                    self._log("【卡住检测】连续4次检测到相同坐标，角色可能被卡住，向下移动1秒")
-                    self.movement_ctrl._press_movement_keys_for_duration(['S'], 1.0)
-                    # 清空位置历史，重新检测
-                    self._position_history.clear()
-                    time.sleep(0.1)
-                    continue
-                
-                # 【抖动检测】检测是否存在 A-B-A-B 抖动模式
-                is_jitter = self._detect_jitter()
-                
-                # 简化日志输出：只在抖动检测失败且历史记录不足时输出
-                if not is_jitter and len(self._position_history) < 4:
-                    self._log(f"【抖动检测】历史记录不足: {len(self._position_history)}/4, 继续收集数据...")
-                
-                # 如果检测到抖动，执行随机移动并清空历史记录（确保下次抖动仍能触发）
-                if is_jitter:
-                    self._perform_random_move()
-                    # 清空位置历史，确保下次抖动检测能重新积累数据
-                    self._position_history.clear()
-                    self._log("【抖动检测】已清空位置历史，准备重新检测")
-                    # 随机移动后继续正常循环
-                    time.sleep(0.1)
-                    continue
-                
-                # 战场状态判断
+                # 【优先级修复】先进行战场状态检测，判断是否有敌人在技能范围内
+                # 如果有敌人在范围内，跳过卡住/抖动检测，直接进入战斗逻辑
                 state, allies, enemies = state_detector.get_battlefield_state_detailed()
                 last_state = state.value
+                
+                # 【快速检测】如果有敌人在技能范围内，立即进入战斗逻辑
+                has_enemy_in_range = False
+                if enemies:
+                    skill_distance, any_in_range = self._get_skill_distance_all_enemies(self_pos, enemies)
+                    if any_in_range:
+                        has_enemy_in_range = True
+                
+                # 【卡住检测】只有在没有敌人在技能范围内时才执行
+                if not has_enemy_in_range:
+                    is_stuck = self._detect_stuck()
+                    if is_stuck:
+                        self._log("【卡住检测】连续4次检测到相同坐标，角色可能被卡住，向下移动1秒")
+                        self.movement_ctrl._press_movement_keys_for_duration(['S'], 1.0)
+                        # 清空位置历史，重新检测
+                        self._position_history.clear()
+                        time.sleep(0.1)
+                        continue
+                    
+                    # 【抖动检测】检测是否存在 A-B-A-B 抖动模式
+                    is_jitter = self._detect_jitter()
+                    
+                    # 简化日志输出：只在抖动检测失败且历史记录不足时输出
+                    if not is_jitter and len(self._position_history) < 4:
+                        self._log(f"【抖动检测】历史记录不足: {len(self._position_history)}/4, 继续收集数据...")
+                    
+                    # 如果检测到抖动，执行随机移动并清空历史记录
+                    if is_jitter:
+                        self._perform_random_move()
+                        # 清空位置历史，确保下次抖动检测能重新积累数据
+                        self._position_history.clear()
+                        self._log("【抖动检测】已清空位置历史，准备重新检测")
+                        # 随机移动后继续正常循环
+                        time.sleep(0.1)
+                        continue
                 
                 # 每次循环都输出详细的战场状态（便于调试随机移动问题）
                 self._log(f"战场状态: {last_state}, 友方: {len(allies) if allies else 0}, 敌方: {len(enemies) if enemies else 0}, 自身: ({self_pos.center_x},{self_pos.center_y})")
