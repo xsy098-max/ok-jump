@@ -288,22 +288,23 @@ class DeployManager:
 
         # 检查进程状态并执行任务
         task_start = time.time()
-        
-        # 再次检查游戏进程
-        if not self._is_game_process_running():
-            raise GameProcessExitedException("游戏进程在任务执行期间意外退出")
+        while time.time() - task_start < timeout:
+            # 再次检查游戏进程
+            if not self._is_game_process_running():
+                raise GameProcessExitedException("游戏进程在任务执行期间意外退出")
 
-        try:
-            result = task_callback()
-            if result:
-                logger.info("测试任务执行成功")
-                return True
-            else:
-                logger.error("测试任务执行失败")
-                return False
-        except Exception as e:
-            logger.error(f"任务执行异常: {e}")
-            raise
+            try:
+                result = task_callback()
+                if result:
+                    logger.info("测试任务执行成功")
+                    return True
+            except Exception as e:
+                logger.error(f"任务执行异常: {e}")
+                raise
+
+            time.sleep(1)
+
+        raise TaskTriggerTimeoutException(f"触发任务超时 ({timeout}秒)")
 
     def _wait_for_game_process(self, timeout: int) -> bool:
         """
@@ -337,8 +338,9 @@ class DeployManager:
         try:
             from adbutils import adb
 
-            # 获取设备 - 使用 device_list() 获取 AdbDevice 对象
-            devices = adb.device_list()
+            # 连接到模拟器
+            adb.connect(f"127.0.0.1:{self.emulator_manager.adb_port}", timeout=5)
+            devices = adb.list()
 
             if not devices:
                 return False

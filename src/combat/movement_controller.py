@@ -58,9 +58,6 @@ class MovementController:
         self.joystick_center = (0.214, 0.787)  # 摇杆中心相对位置 (410/1920, 850/1080)
         self.joystick_radius = 150  # 摇杆半径（像素）
         self.joystick_base_resolution = (1920, 1080)  # 基准分辨率
-        
-        # 停止标志（用于中断 ADB 移动循环）
-        self._stop_requested = False
     
     def set_move_duration(self, duration):
         """
@@ -158,9 +155,6 @@ class MovementController:
     
     def stop(self):
         """停止移动"""
-        # 设置停止标志（用于中断 ADB 移动循环）
-        self._stop_requested = True
-        
         if self.is_adb():
             self._stop_adb()
         else:
@@ -503,19 +497,13 @@ class MovementController:
             start_time = time.time()
             swipe_duration = self.move_duration  # 使用配置的移动持续时间（默认 0.5 秒）
             
-            # 重置停止标志
-            self._stop_requested = False
-            
-            while time.time() - start_time < duration and not self._stop_requested:
+            while time.time() - start_time < duration:
                 # 每次发送短时间 swipe
                 self.task.swipe(cx, cy, end_x, end_y, duration=swipe_duration, after_sleep=0)
                 # 短暂间隔（模拟主循环间隔）
                 time.sleep(0.05)
             
-            if self._stop_requested:
-                self.task.logger.info(f"[ADB移动] 收到停止信号，中断移动")
-            else:
-                self.task.logger.info(f"[ADB移动] 完成: {key_str} 方向移动 {duration}秒")
+            self.task.logger.info(f"[ADB移动] 完成: {key_str} 方向移动 {duration}秒")
         except Exception as e:
             self.task.logger.error(f"[ADB移动] 异常: {e}")
 
@@ -653,26 +641,23 @@ class MovementController:
         cx, cy = self._get_joystick_center_px()
         if cx is None:
             return
-            
+        
         # 获取适配后的摇杆半径
         radius = self._get_joystick_radius_px()
-            
+        
         # 【修复】使用循环发送短时间 swipe，与 move_towards 一致
         start_time = time.time()
         swipe_duration = self.move_duration  # 使用配置的移动持续时间
-            
-        # 重置停止标志
-        self._stop_requested = False
-            
-        while time.time() - start_time < duration and not self._stop_requested:
+        
+        while time.time() - start_time < duration:
             # 向左滑动
             self.task.swipe(cx, cy, cx - radius, cy, duration=swipe_duration, after_sleep=0)
             time.sleep(0.05)
-                
-            # 检查是否超时或收到停止信号
-            if time.time() - start_time >= duration or self._stop_requested:
+            
+            # 检查是否超时
+            if time.time() - start_time >= duration:
                 break
-                
+            
             # 向右滑动
             self.task.swipe(cx, cy, cx + radius, cy, duration=swipe_duration, after_sleep=0)
             time.sleep(0.05)
@@ -682,19 +667,16 @@ class MovementController:
         cx, cy = self._get_joystick_center_px()
         if cx is None:
             return
-            
+        
         # 获取适配后的摇杆半径
         radius = self._get_joystick_radius_px()
-            
+        
         # 【修复】使用循环发送短时间 swipe，与 move_towards 一致
         start_time = time.time()
         swipe_duration = self.move_duration  # 使用配置的移动持续时间
         end_x, end_y = cx, cy - radius
-            
-        # 重置停止标志
-        self._stop_requested = False
-            
-        while time.time() - start_time < duration and not self._stop_requested:
+        
+        while time.time() - start_time < duration:
             self.task.swipe(cx, cy, end_x, end_y, duration=swipe_duration, after_sleep=0)
             time.sleep(0.05)
     

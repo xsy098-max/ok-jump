@@ -72,10 +72,6 @@ class CITestTask(BaseTask):
             '最大查找构建数': 20,
             '下载超时(秒)': 300,
             '保留旧包数量': 3,
-            # 账号递增配置
-            '账号递增启用': False,
-            '账号模板': 'qwer878787{N}',
-            '账号当前序号': 1,
         }
 
         # 配置类型(下拉框等)
@@ -105,10 +101,6 @@ class CITestTask(BaseTask):
             '最大查找构建数': '从Jenkins查找APK时最多遍历多少个构建',
             '下载超时(秒)': 'APK下载最长等待时间',
             '保留旧包数量': '本地最多保留多少个旧版本APK',
-            # 账号递增配置
-            '账号递增启用': '启用后每次测试自动使用新账号',
-            '账号模板': '账号模板，{N}会被序号替换，如qwer878787{N} -> qwer87878786',
-            '账号当前序号': '当前使用的账号序号，每次测试后自动+1',
         }
 
         # 组件实例
@@ -123,9 +115,6 @@ class CITestTask(BaseTask):
         # 状态追踪
         self._ci_config: Dict[str, Any] = {}
         self._start_time: float = 0
-        
-        # 截图追踪：记录任务开始时间，用于筛选本次任务的截图
-        self._task_start_timestamp: float = 0
 
     def run(self):
         """执行CI测试任务"""
@@ -134,8 +123,6 @@ class CITestTask(BaseTask):
         self.logger.info("=" * 60)
 
         self._start_time = time.time()
-        # 记录任务开始时间戳，用于筛选本次任务产生的截图
-        self._task_start_timestamp = time.time()
 
         try:
             # 1. 加载配置
@@ -160,15 +147,8 @@ class CITestTask(BaseTask):
             # 6. 发送通知
             self._send_notification()
 
-            # 6.5 如果测试失败，发送错误报告（包含截图）
-            if not test_result:
-                self._send_test_failure_report()
-
             # 7. 清理环境
             self._cleanup()
-
-            # 8. 递增账号序号（无论成功失败都递增）
-            self._increment_account_index()
 
             success = test_result
             self.logger.info("=" * 60)
@@ -180,15 +160,11 @@ class CITestTask(BaseTask):
         except ContinuousFailureException as e:
             self.logger.error(f"连续失败中断: {e}")
             self._handle_continuous_failure(str(e))
-            # 递增账号序号
-            self._increment_account_index()
             return False
 
         except Exception as e:
             self.logger.error(f"CI测试任务异常: {e}", exc_info=True)
             self._handle_exception(e)
-            # 递增账号序号
-            self._increment_account_index()
             return False
 
     def _load_config(self):
@@ -218,11 +194,18 @@ class CITestTask(BaseTask):
             'max_builds_to_search': self.config.get('最大查找构建数', 20),
             'download_timeout': self.config.get('下载超时(秒)', 300),
             'keep_old_packages': self.config.get('保留旧包数量', 3),
-            # 账号递增配置
-            'account_increment_enabled': self.config.get('账号递增启用', False),
-            'account_template': self.config.get('账号模板', 'qwer878787{N}'),
-            'account_current_index': self.config.get('账号当前序号', 1),
         }
+
+        # 尝试从配置文件加载
+        config_file = Path('configs/ci_config.json')
+        if config_file.exists():
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    file_config = json.load(f)
+                self._ci_config.update(file_config)
+                self.logger.info("已加载CI配置文件")
+            except Exception as e:
+                self.logger.warning(f"加载CI配置文件失败: {e}")
 
         self.logger.info(f"CI配置: {self._ci_config}")
 
@@ -284,9 +267,6 @@ class CITestTask(BaseTask):
         self.logger.info("执行测试任务")
         self.logger.info("-" * 40)
 
-        # 设置当前账号（账号递增功能）- 必须在任务执行前设置
-        self._set_account_for_login()
-
         # 定义任务回调
         def run_test_all_in_one() -> bool:
             """执行TestAllInOneTask"""
@@ -306,13 +286,6 @@ class CITestTask(BaseTask):
                 self.logger.info("开始执行TestAllInOneTask...")
                 result = task.run()
 
-                # 获取错误信息
-                error_info = None
-                if not result and hasattr(task, '_last_error_info') and task._last_error_info:
-                    error_info = {
-                        "error_message": f"{task._last_error_info.get('task_name', '未知任务')}: {task._last_error_info.get('error', '未知错误')}"
-                    }
-
                 # 记录结果
                 task_result = TaskResult(
                     task_name="TestAllInOneTask",
@@ -320,7 +293,7 @@ class CITestTask(BaseTask):
                     start_time=datetime.now().isoformat(),
                     end_time=datetime.now().isoformat(),
                     duration=0.0,
-                    error_info=error_info if not result else None
+                    error_info=None if result else {"error_message": "任务执行失败"}
                 )
                 self._task_results.append(task_result)
 
@@ -415,117 +388,41 @@ class CITestTask(BaseTask):
         except Exception as e:
             self.logger.error(f"发送通知异常: {e}")
 
-    def _send_test_failure_report(self):
-        """发送测试失败的错误报告（包含截图）"""
-        if self._notifier is None:
-            self.logger.info("跳过错误报告发送(未配置Webhook)")
-            return
-
-        self.logger.info("发送测试失败错误报告...")
-
-        try:
-            from datetime import datetime
-            
-            # 构建详细的错误信息
-            error_parts = []
-            error_parts.append(f"⏰ 时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            error_parts.append("")  # 空行
-            
-            for result in self._task_results:
-                if result.status == "failed":
-                    error_parts.append("─" * 20)
-                    error_parts.append(f"📋 任务: {result.task_name}")
-                    if result.error_info:
-                        error_msg = result.error_info.get('error_message', '未知错误')
-                        error_parts.append(f"❌ 错误: {error_msg}")
-                    else:
-                        error_parts.append("❌ 错误: 未知错误")
-                    error_parts.append("")  # 空行
-            
-            error_message = "\n".join(error_parts)
-            
-            # 发送错误报告（只发送本次任务产生的截图）
-            self._notifier.send_error_report(
-                title="CI测试失败",
-                error_message=error_message[:2000],
-                screenshots_dir="screenshots",
-                max_images=5,
-                since_timestamp=self._task_start_timestamp
-            )
-            self.logger.info("测试失败错误报告已发送")
-        except Exception as e:
-            self.logger.error(f"发送错误报告异常: {e}")
-
     def _handle_deployment_failure(self, deploy_result: DeploymentResult):
         """处理部署失败"""
         self.logger.error(f"部署失败: {deploy_result.error_message}")
 
-        # 发送错误报告（错误消息 + 截图）
+        # 发送告警
         if self._notifier:
-            self._notifier.send_error_report(
+            self._notifier.send_alert(
                 title="部署失败",
-                error_message=f"CI部署失败: {deploy_result.error_message}",
-                screenshots_dir="screenshots",
-                max_images=3,
-                since_timestamp=self._task_start_timestamp
+                message=f"CI部署失败: {deploy_result.error_message}"
             )
 
     def _handle_continuous_failure(self, message: str):
         """处理连续失败"""
         self.logger.error(f"连续失败中断: {message}")
 
-        # 发送错误报告
+        # 发送告警
         if self._notifier:
-            self._notifier.send_error_report(
-                title="连续失败告警",
-                error_message=f"CI测试连续失败达到阈值: {message}",
-                screenshots_dir="screenshots",
-                max_images=3,
-                since_timestamp=self._task_start_timestamp
-            )
-            # 额外 @all 提醒
             self._notifier.send_alert(
-                title="需要关注",
-                message="@all",
+                title="连续失败告警",
+                message=f"CI测试连续失败达到阈值: {message}",
                 mentioned_list=["@all"]
             )
 
     def _handle_exception(self, exception: Exception):
         """处理异常"""
-        import traceback
-        error_detail = f"{type(exception).__name__}: {exception}\n\n{traceback.format_exc()}"
-        
-        # 发送错误报告
+        # 发送告警
         if self._notifier:
-            self._notifier.send_error_report(
+            self._notifier.send_alert(
                 title="CI测试异常",
-                error_message=error_detail[:2000],  # 限制长度
-                screenshots_dir="screenshots",
-                max_images=3,
-                since_timestamp=self._task_start_timestamp
+                message=f"CI测试任务发生异常: {type(exception).__name__}: {exception}"
             )
 
     def _cleanup(self):
         """清理环境"""
         self.logger.info("清理CI环境...")
-
-        # 在关闭模拟器前保存最后的游戏截图
-        self._save_final_screenshot()
-
-        # 停止 ok 框架的截图循环，避免模拟器关闭后报错
-        try:
-            from ok import og
-            if hasattr(og, 'executor') and og.executor:
-                # 设置暂停标志，停止后台截图
-                if hasattr(og.executor, 'paused'):
-                    og.executor.paused = True
-                    self.logger.info("已暂停截图循环")
-                # 尝试停止 executor
-                if hasattr(og.executor, 'stop'):
-                    og.executor.stop()
-                    self.logger.info("已停止 executor")
-        except Exception as e:
-            self.logger.warning(f"停止截图循环失败: {e}")
 
         try:
             if self._deploy_manager:
@@ -535,145 +432,24 @@ class CITestTask(BaseTask):
 
         self.logger.info("CI环境清理完成")
 
-    def _save_final_screenshot(self):
-        """在任务结束前保存最后的游戏截图"""
-        try:
-            import cv2
-            from datetime import datetime
-                
-            timestamp = datetime.now().strftime('%H-%M-%S')
-            filename = f"final_state_{timestamp}.png"
-            filepath = os.path.join("screenshots", filename)
-                
-            # 方法1: 尝试从当前帧获取
-            if hasattr(self, 'frame') and self.frame is not None:
-                cv2.imwrite(filepath, self.frame)
-                self.logger.info(f"保存最终状态截图(当前帧): {filepath}")
-                return
-                
-            # 方法2: 尝试手动截图
-            try:
-                self.logger.info("尝试手动截取最终状态...")
-                self.next_frame()
-                if hasattr(self, 'frame') and self.frame is not None:
-                    cv2.imwrite(filepath, self.frame)
-                    self.logger.info(f"保存最终状态截图(手动): {filepath}")
-                    return
-            except Exception as e:
-                self.logger.warning(f"手动截图失败: {e}")
-                
-            # 方法3: 尝试通过 ADB 截图
-            try:
-                from ok import og
-                if hasattr(og, 'executor') and og.executor:
-                    device = og.executor.interaction.device if hasattr(og.executor.interaction, 'device') else None
-                    if device:
-                        self.logger.info("尝试通过ADB截图...")
-                        png_bytes = device.screenshot()
-                        if png_bytes:
-                            import numpy as np
-                            img_array = np.frombuffer(png_bytes, dtype=np.uint8)
-                            img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-                            if img is not None:
-                                cv2.imwrite(filepath, img)
-                                self.logger.info(f"保存最终状态截图(ADB): {filepath}")
-                                return
-            except Exception as e:
-                self.logger.warning(f"ADB截图失败: {e}")
-                
-            self.logger.warning("无法保存最终状态截图")
-        except Exception as e:
-            self.logger.warning(f"保存最终截图失败: {e}")
-
-    # ==================== 账号递增功能 ====================
-
-    def _generate_current_account(self) -> str:
+    def get_task_by_class(self, task_class):
         """
-        生成当前账号
-
-        Returns:
-            str: 当前账号字符串
-        """
-        template = self._ci_config.get('account_template', 'qwer878787{N}')
-        index = self._ci_config.get('account_current_index', 1)
-        return template.replace('{N}', str(index))
-
-    def _set_account_for_login(self):
-        """为AutoLoginTask设置当前账号"""
-        if not self._ci_config.get('account_increment_enabled', False):
-            self.logger.info("账号递增功能未启用，跳过设置")
-            return
-
-        account = self._generate_current_account()
-        self.logger.info(f"设置当前账号: {account}")
-
-        # 方法1: 通过 og.config 全局配置传递（优先）
-        try:
-            from ok import og
-            if hasattr(og, 'config') and og.config:
-                og.config['ci_account'] = account
-                og.config['ci_input_account'] = True
-                self.logger.info(f"已通过og.config设置账号: {account}")
-        except Exception as e:
-            self.logger.warning(f"通过og.config设置账号失败: {e}")
-
-        # 方法2: 同时更新配置文件（作为备份）
-        try:
-            config_path = os.path.join('configs', 'AutoLoginTask.json')
-            if not os.path.exists(config_path):
-                config_path = 'configs/AutoLoginTask.json'
-
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config_data = json.load(f)
-
-            config_data['账号'] = account
-            config_data['输入账号'] = True
-
-            with open(config_path, 'w', encoding='utf-8') as f:
-                json.dump(config_data, f, ensure_ascii=False, indent=4)
-
-            self.logger.info(f"已更新AutoLoginTask配置文件，账号: {account}")
-        except Exception as e:
-            self.logger.error(f"更新AutoLoginTask配置失败: {e}")
-
-    def _increment_account_index(self):
-        """递增账号序号并保存到配置文件"""
-        if not self._ci_config.get('account_increment_enabled', False):
-            return
-
-        # 递增序号
-        current_index = self._ci_config.get('account_current_index', 1)
-        new_index = current_index + 1
-        self._ci_config['account_current_index'] = new_index
-
-        self.logger.info(f"账号序号递增: {current_index} -> {new_index}")
-
-        # 保存到配置文件
-        self._save_account_index_to_config(new_index)
-
-    def _save_account_index_to_config(self, new_index: int):
-        """
-        保存账号序号到配置文件
+        获取指定类的任务实例
 
         Args:
-            new_index: 新的账号序号
+            task_class: 任务类
+
+        Returns:
+            任务实例，如果无法获取则返回None
         """
         try:
-            config_path = os.path.join('configs', 'CITestTask.json')
-            if not os.path.exists(config_path):
-                config_path = 'configs/CITestTask.json'
+            # 尝试从ok框架获取
+            if hasattr(og, 'get_task_by_class'):
+                return og.get_task_by_class(task_class)
 
-            # 读取现有配置
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config_data = json.load(f)
+            # 尝试直接实例化
+            return task_class()
 
-            # 更新序号
-            config_data['账号当前序号'] = new_index
-
-            # 保存配置
-            with open(config_path, 'w', encoding='utf-8') as f:
-                json.dump(config_data, f, ensure_ascii=False, indent=4)
-
-            self.logger.info(f"账号序号已保存到配置文件: {new_index}")
         except Exception as e:
-            self.logger.error(f"保存账号序号失败: {e}")
+            self.logger.error(f"获取任务实例失败: {e}")
+            return None

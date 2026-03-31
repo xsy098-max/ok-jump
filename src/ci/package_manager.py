@@ -280,12 +280,7 @@ class PackageManager:
         for attempt in range(self.retry_count):
             try:
                 # 流式下载，支持大文件
-                # 处理超大超时值，超过 C timeval 限制时使用 None (无限制)
-                # C timeval 最大约 2147 秒 (约 35 分钟)
-                timeout = self.download_timeout
-                if timeout is not None and timeout > 1800:  # 超过 30 分钟使用无限制
-                    timeout = None
-                response = requests.get(url, stream=True, timeout=timeout)
+                response = requests.get(url, stream=True, timeout=self.download_timeout)
                 response.raise_for_status()
 
                 total_size = int(response.headers.get('content-length', 0))
