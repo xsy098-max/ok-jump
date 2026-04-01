@@ -25,8 +25,7 @@ jobs:
         id: build-app
         uses: ok-oldking/pyappify-action@v1.0.19
         with:
-          version: 'v1.0.19'
-          use_release: 'v1.0.19'
+          version: 'v1.0.42'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
