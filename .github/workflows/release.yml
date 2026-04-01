@@ -26,8 +26,6 @@ jobs:
       - name: Build with PyAppify Action
         id: build-app
         uses: ok-oldking/pyappify-action@v1.0.19
-        with:
-          version: 'v1.0.45'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PIP_TIMEOUT: "300"
