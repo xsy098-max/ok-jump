@@ -23,13 +23,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Inject GITHUB_TOKEN into pyappify.yml
-        run: |
-          (Get-Content pyappify.yml) -replace '\$\{GITHUB_TOKEN\}', $env:GITHUB_TOKEN | Set-Content pyappify.yml
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Build with PyAppify Action
         id: build-app
         uses: ok-oldking/pyappify-action@v1.0.19
