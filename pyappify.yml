@@ -2,7 +2,7 @@ name: "ok-jump"
 uac: true
 profiles:
   - name: "China"
-    git_url: "https://cnb.cool/xsy098-max/ok-jump.git"
+    git_url: "https://github.com/xsy098-max/ok-jump.git"
     admin: true
     main_script: "main.py"
     requires_python: "3.12"
@@ -12,6 +12,6 @@ profiles:
     pip_args: "--timeout 300 --retries 3"
 
   - name: "Debug"
-    git_url: "https://cnb.cool/xsy098-max/ok-jump.git"
+    git_url: "https://github.com/xsy098-max/ok-jump.git"
     main_script: "main_debug.py"
     use_pythonw: false
