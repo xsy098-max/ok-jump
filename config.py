@@ -71,7 +71,7 @@ config = {
     'config_folder': 'configs',
     'gui_icon': 'icons/icon.png',
     'gui_title': '漫画群星：大集结 - 自动化工具',
-    'version': '1.4.11',
+    'version': '1.4.13',
     
     # 自定义全局对象（用于 YOLO 检测等功能）
     'my_app': ['src.globals', 'Globals'],
@@ -109,11 +109,6 @@ config = {
         'ratio': '16:9',
         'min_size': (1280, 720),
         'resize_to': [(2560, 1440), (1920, 1080), (1600, 900), (1280, 720)],
-    },
-    
-    'reference_resolution': {
-        'width': 1920,
-        'height': 1080,
     },
     
     'window_size': {

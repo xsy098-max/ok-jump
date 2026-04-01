@@ -13,10 +13,7 @@ on:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        platform: [windows-latest]
-    runs-on: ${{ matrix.platform }}
+    runs-on: windows-latest
 
     steps:
       - name: Checkout repository
@@ -27,8 +24,6 @@ jobs:
       - name: Build with PyAppify Action
         id: build-app
         uses: ok-oldking/pyappify-action@v1.0.19
-        with:
-          version: 'v1.0.42'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -51,17 +46,14 @@ jobs:
           body: |
             ## ok-jump Release ${{ steps.get_version.outputs.VERSION }}
 
-            ### 下载说明
-            - **China**: 标准版本，使用国内镜像源加速下载
-            - **Debug**: 调试版本，启用调试模式
+            ### Profiles
+            - **China**: Standard version with China mirror acceleration
+            - **Debug**: Debug version with console output
 
-            ### 更新内容
-            请查看下方自动生成的更新日志
-
-            ### 安装说明
-            1. 下载对应版本的 zip 文件
-            2. 解压到任意目录
-            3. 运行 `ok-jump.exe` 启动程序
+            ### Installation
+            1. Download the zip file for your preferred profile
+            2. Extract to any directory
+            3. Run `ok-jump.exe` to start
           files: pyappify_dist/*
           draft: false
           prerelease: false

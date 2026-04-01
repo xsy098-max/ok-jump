@@ -33,6 +33,8 @@ class JumpTaskMixin:
         """初始化混入类的实例变量"""
         self._resolution_checked = False
         self._background_mode_logged = False
+        self._adb_cache = None
+        self._adb_cache_ts = 0
 
     # ==================== 游戏语言检测 ====================
 
@@ -397,42 +399,48 @@ class JumpTaskMixin:
 
     def _is_adb_interaction(self):
         """
-        检查当前是否使用 ADB 交互（模拟器模式）
+        检查当前是否使用 ADB 交互（模拟器模式），带缓存
 
         Returns:
             bool: True 如果使用 ADB 交互
         """
+        # 10秒缓存，运行期间不会切换交互模式
+        now = time.time()
+        if self._adb_cache is not None and (now - self._adb_cache_ts) < 10:
+            return self._adb_cache
+
         try:
             from ok.device.intercation import ADBInteraction
             from ok import og
 
+            result = False
             # 方法1：检查 executor.interaction 是否为 ADBInteraction
             if hasattr(self, 'executor') and self.executor is not None:
                 if hasattr(self.executor, 'interaction') and self.executor.interaction is not None:
                     interaction = self.executor.interaction
                     if isinstance(interaction, ADBInteraction):
-                        return True
+                        result = True
 
             # 方法2（备用）：检查全局设备管理器的设备类型
-            if og is not None and hasattr(og, 'device_manager') and og.device_manager is not None:
+            if not result and og is not None and hasattr(og, 'device_manager') and og.device_manager is not None:
                 dm = og.device_manager
-                # 检查是否有 ADB 设备连接
                 if hasattr(dm, 'device') and dm.device is not None:
-                    return True
-                # 检查当前捕获方式是否为 ADB
-                if hasattr(dm, 'config') and dm.config.get('capture') == 'adb':
-                    return True
-                # 检查是否有 adb 配置且没有 hwnd_window
-                if dm.adb_capture_config and not dm.hwnd_window:
-                    return True
+                    result = True
+                elif hasattr(dm, 'config') and dm.config.get('capture') == 'adb':
+                    result = True
+                elif hasattr(dm, 'adb_capture_config') and not dm.hwnd_window:
+                    result = True
+
+            self._adb_cache = result
+            self._adb_cache_ts = now
+            return result
 
         except Exception as e:
-            # 记录异常以便调试
             try:
                 self.logger.debug(f"_is_adb_interaction 检测异常: {e}")
             except Exception:
                 pass
-        return False
+            return False
 
     def is_adb(self):
         """
@@ -749,51 +757,27 @@ class JumpTaskMixin:
 
     def smart_click(self, x, y=None, *args, **kwargs):
         """
-        智能点击：后台模式使用 SendInput，前台模式使用框架方法
-
-        根据游戏窗口状态自动选择最优的点击方式
-
+        智能点击（委托给 self.click()，已包含后台模式支持）
+    
         Args:
-            x: X坐标或检测结果对象
-            y: Y坐标（当x是检测结果时可不传）
-            *args, **kwargs: 传递给点击方法的其他参数
-
+            x: X坐标/检测结果对象/Box对象
+            y: Y坐标
+            *args, **kwargs: 传递给 click() 的其他参数
+    
         Returns:
             点击操作的返回值
         """
-        # 处理 DetectionResult 对象
-        if hasattr(x, 'center_x'):
-            click_x, click_y = x.center_x, x.center_y
-        elif hasattr(x, 'x') and hasattr(x, 'width'):
-            # Box 对象
-            click_x = x.x + x.width / 2
-            click_y = x.y + x.height / 2
-        else:
-            click_x, click_y = x, y
-
-        # 检查是否需要后台点击
-        if self._need_background_click():
-            after_sleep = kwargs.get('after_sleep', 0.5)
-            return self.background_click(int(click_x), int(click_y), after_sleep=after_sleep)
-
-        # 前台模式使用框架方法
         return self.click(x, y, *args, **kwargs)
-
+    
     def smart_click_relative(self, x, y, *args, **kwargs):
         """
-        智能相对坐标点击
-
+        智能相对坐标点击（委托给 self.click_relative()，已包含后台模式支持）
+    
         Args:
             x, y: 相对坐标 (0-1)
-            *args, **kwargs: 传递给点击方法的其他参数
-
+            *args, **kwargs: 传递给 click_relative() 的其他参数
+    
         Returns:
             点击操作的返回值
         """
-        # 检查是否需要后台点击
-        if self._need_background_click():
-            after_sleep = kwargs.get('after_sleep', 0.5)
-            return self.background_click_relative(x, y, after_sleep=after_sleep)
-
-        # 前台模式使用框架方法
         return self.click_relative(x, y, *args, **kwargs)

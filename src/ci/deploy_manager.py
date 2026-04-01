@@ -154,7 +154,7 @@ class DeployManager:
                     else:
                         # 使用本地已有的APK
                         local_build = self.package_manager.get_local_build_number()
-                        apk_files = list(Path("packages").glob("*.apk"))
+                        apk_files = list(self.package_manager.download_dir.glob("*.apk"))
                         for apk in apk_files:
                             info = self.package_manager._parse_apk_filename(apk.name)
                             if info['build_number'] == local_build:

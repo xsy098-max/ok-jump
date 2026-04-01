@@ -12,10 +12,5 @@ profiles:
     pip_args: "-i https://mirrors.aliyun.com/pypi/simple"
 
   - name: "Debug"
-    git_url: "https://${GITHUB_TOKEN}@github.com/xsy098-max/ok-jump.git"
     main_script: "main_debug.py"
-    admin: true
-    requires_python: "3.12"
-    requirements: "requirements.txt"
     use_pythonw: false
-    pip_args: "-i https://mirrors.aliyun.com/pypi/simple"

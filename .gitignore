@@ -5,8 +5,6 @@ screenshots/
 __pycache__/
 *.py[cod]
 *.egg-info/
-dist/
-build/
 
 # IDE
 .idea/
@@ -16,8 +14,6 @@ build/
 # OS
 Thumbs.db
 .DS_Store
-nul
-nul_
 
 # Test results
 test_results/
@@ -28,7 +24,11 @@ test_results/
 # Logs
 logs/
 
-# Build artifacts
-*.spec
-=*
+# PyAppify
+data/
+pyappify_dist/
 packages/
+
+# Legacy (Windows reserved filename, cannot be deleted)
+nul
+nul_
