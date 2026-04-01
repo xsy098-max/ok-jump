@@ -30,6 +30,8 @@ jobs:
           version: 'v1.0.42'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PIP_INDEX_URL: "https://pypi.tuna.tsinghua.edu.cn/simple"
+          PIP_TIMEOUT: "300"
 
       - name: Get version from tag
         id: get_version

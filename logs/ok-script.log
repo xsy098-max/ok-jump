@@ -8024,3 +8024,49 @@ pywintypes.error: (1400, 'GetClientRect', '无效的窗口句柄。')
 2026-04-01 17:08:34,374 INFO MainThread handler:handler stop raised exception ok.gui.StartController
 2026-04-01 17:08:34,375 INFO MainThread handler:handler stop raised exception RefreshAdb
 2026-04-01 17:08:34,376 INFO MainThread TaskExecutor:Executor destroy
+2026-04-01 21:49:41,796 INFO MainThread ok:ok-script init 1.4.19, ['main.py'], pid=42436 config: {'debug': False, 'use_gui': True, 'config_folder': 'configs', 'gui_icon': 'icons/icon.png', 'gui_title': '漫画群星：大集结 - 自动化工具', 'version': '1.4.19', 'my_app': ['src.globals', 'Globals'], 'global_configs': [<ok.util.config.ConfigOption object at 0x0000017EDFBFAA50>, <ok.util.config.ConfigOption object at 0x0000017EC686C530>], 'ocr': {'lib': 'onnxocr', 'params': {'use_openvino': True, 'use_npu': False}}, 'template_matching': {'coco_feature_json': 'E:\\python wuwa\\ok-jump\\assets\\coco_detection.json', 'default_threshold': 0.8}, 'windows': {'title': '漫画群星：大集结', 'exe': '漫画群星：大集结.exe', 'hwnd_class': 'UnityWndClass', 'interaction': 'PyDirect', 'capture_method': ['WGC', 'BitBlt_RenderFull', 'BitBlt'], 'skip_pos_check': True}, 'adb': {'enabled': True, 'packages': 'com.lmd.xproject.dev'}, 'supported_resolution': {'ratio': '16:9', 'min_size': (1280, 720), 'resize_to': [(2560, 1440), (1920, 1080), (1600, 900), (1280, 720)]}, 'window_size': {'width': 900, 'height': 600, 'min_width': 900, 'min_height': 600}, 'log_file': 'logs/ok-jump.log', 'error_log_file': 'logs/ok-jump_error.log', 'screenshots_folder': 'screenshots', 'onetime_tasks': [['src.task.CITestTask', 'CITestTask'], ['src.task.TestAllInOneTask', 'TestAllInOneTask'], ['src.task.AutoLoginTask', 'AutoLoginTask'], ['src.task.AutoTutorialTask', 'AutoTutorialTask'], ['src.task.AutoMatchTask', 'AutoMatchTask'], ['src.task.DailyTask', 'DailyTask']], 'trigger_tasks': [['src.task.AutoCombatTask', 'AutoCombatTask']], 'custom_tabs': [['src.gui.log_tab', 'LogTab']], 'scene': ['src.scene.JumpScene', 'JumpScene']}
+2026-04-01 21:49:41,799 INFO MainThread ok:pyappify  app_version:None, app_profile:None, pyappify_version:None pyappify_upgradeable:False, pyappify_executable:None
+2026-04-01 21:49:41,806 INFO MainThread capture:check available WINDOWS_BUILD_NUMBER:19045 >= 20348 False
+2026-04-01 21:49:41,812 INFO MainThread ok:use_dml result is True
+2026-04-01 21:49:41,813 INFO MainThread ok:SetProcessDpiAwareness 0
+2026-04-01 21:49:41,814 INFO MainThread ok:do_init, config: {'debug': False, 'use_gui': True, 'config_folder': 'configs', 'gui_icon': 'icons/icon.png', 'gui_title': '漫画群星：大集结 - 自动化工具', 'version': '1.4.19', 'my_app': ['src.globals', 'Globals'], 'global_configs': [<ok.util.config.ConfigOption object at 0x0000017EDFBFAA50>, <ok.util.config.ConfigOption object at 0x0000017EC686C530>], 'ocr': {'lib': 'onnxocr', 'params': {'use_openvino': True, 'use_npu': False}}, 'template_matching': {'coco_feature_json': 'E:\\python wuwa\\ok-jump\\assets\\coco_detection.json', 'default_threshold': 0.8}, 'windows': {'title': '漫画群星：大集结', 'exe': '漫画群星：大集结.exe', 'hwnd_class': 'UnityWndClass', 'interaction': 'PyDirect', 'capture_method': ['WGC', 'BitBlt_RenderFull', 'BitBlt'], 'skip_pos_check': True}, 'adb': {'enabled': True, 'packages': 'com.lmd.xproject.dev'}, 'supported_resolution': {'ratio': '16:9', 'min_size': (1280, 720), 'resize_to': [(2560, 1440), (1920, 1080), (1600, 900), (1280, 720)]}, 'window_size': {'width': 900, 'height': 600, 'min_width': 900, 'min_height': 600}, 'log_file': 'logs/ok-jump.log', 'error_log_file': 'logs/ok-jump_error.log', 'screenshots_folder': 'screenshots', 'onetime_tasks': [['src.task.CITestTask', 'CITestTask'], ['src.task.TestAllInOneTask', 'TestAllInOneTask'], ['src.task.AutoLoginTask', 'AutoLoginTask'], ['src.task.AutoTutorialTask', 'AutoTutorialTask'], ['src.task.AutoMatchTask', 'AutoMatchTask'], ['src.task.DailyTask', 'DailyTask']], 'trigger_tasks': [['src.task.AutoCombatTask', 'AutoCombatTask']], 'custom_tabs': [['src.gui.log_tab', 'LogTab']], 'scene': ['src.scene.JumpScene', 'JumpScene']}
+2026-04-01 21:49:41,815 INFO MainThread DeviceManager:__init__ start
+2026-04-01 21:49:41,819 INFO MainThread capture:HwndWindow init title:漫画群星：大集结 player_id:-1 exe_name:['漫画群星：大集结.exe'] hwnd_class:UnityWndClass
+2026-04-01 21:49:41,821 INFO MainThread DeviceManager:__init__ end
+2026-04-01 21:49:41,840 INFO MainThread Screenshot:remove_old_files E:\python wuwa\ok-jump\screenshots
+2026-04-01 21:49:41,846 ERROR MainThread TaskExecutor:install ocr translations error for zh_CN 
+2026-04-01 21:49:41,906 INFO MainThread app:translator install success <PySide6.QtCore.QLocale(Chinese, Simplified Han, China) at 0x0000017EE15E6B00>, 开发工具
+2026-04-01 21:49:42,050 INFO MainThread AutoLoginTask:勾选框检测器初始化成功: assets\select\select.onnx
+2026-04-01 21:49:42,066 INFO MainThread ok:do_init, end
+2026-04-01 21:49:42,067 INFO MainThread __main__:Capture process not found error logging suppressed
+2026-04-01 21:49:42,067 INFO MainThread __main__:TaskButtons.stop_clicked patched: proper task stopping
+2026-04-01 21:49:42,068 INFO MainThread ok:OK start id:1644462734800 pid:42436
+2026-04-01 21:49:42,235 INFO MainThread MainWindow:main window __init__
+2026-04-01 21:49:42,506 INFO RefreshAdb DeviceManager:start update_pc_device {'title': '漫画群星：大集结', 'exe': ['漫画群星：大集结.exe'], 'hwnd_class': 'UnityWndClass', 'interaction': 'PyDirect', 'capture_method': ['WGC', 'BitBlt_RenderFull', 'BitBlt'], 'skip_pos_check': True}, pc_device: {'address': '', 'imei': 'pc', 'device': 'windows', 'model': '', 'nick': ['漫画群星：大集结.exe'], 'width': 0, 'height': 0, 'hwnd': ['漫画群星：大集结.exe'], 'capture': 'windows', 'connected': False, 'full_path': 'D:\\Python-wuwa\\Internal_1\\漫画群星：大集结.exe'}
+2026-04-01 21:49:42,538 ERROR MainThread ok:install translations error for zh_CN 
+2026-04-01 21:49:42,617 INFO RefreshAdb DeviceManager:installed emulators [EmulatorInstance(serial='127.0.0.1:5555', name='leidian0', path='E:/leidian/LDPlayer9/dnplayer.exe')]
+2026-04-01 21:49:42,711 INFO RefreshAdb DeviceManager:set ADBUTILS_ADB_PATH C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\site-packages\adbutils\binaries\adb.exe
+2026-04-01 21:49:44,067 INFO MainThread MainWindow:main window __init__ done
+2026-04-01 21:49:44,094 INFO MainThread MainWindow:Window has fully displayed {'task': 0, 'exit': False}
+2026-04-01 21:49:44,096 INFO MainThread MainWindow:update success, show copyright
+2026-04-01 21:49:44,334 INFO MainThread ok:app.exec()
+2026-04-01 21:49:44,411 INFO MainThread __main__:定时配置已更新: 每天 12:40 (启用=True)
+2026-04-01 21:49:44,412 INFO MainThread __main__:定时执行已启用: 每天 12:40
+2026-04-01 21:49:44,413 INFO MainThread __main__:定时任务调度器已启动（支持配置热更新），每分钟检查一次
+2026-04-01 21:49:44,415 INFO MainThread __main__:定时任务调度器延迟初始化完成
+2026-04-01 21:49:44,786 INFO RefreshAdb __main__:adb_connect try_connect 127.0.0.1:5555 cannot connect to 127.0.0.1:5555: 由于目标计算机积极拒绝，无法连接。 (10061)
+2026-04-01 21:49:44,810 INFO RefreshAdb DeviceManager:adb_connect 127.0.0.1:5555 not in device list []
+2026-04-01 21:49:44,822 INFO RefreshAdb DeviceManager:adb_connect emulator result E:/leidian/LDPlayer9/dnplayer.exe 0 LDPlayer9 None hwnd_size (0, 0) adb_size (0, 0) (None, 0)
+2026-04-01 21:49:44,823 INFO RefreshAdb DeviceManager:refresh emulators {'pc': {'address': '', 'imei': 'pc', 'device': 'windows', 'model': '', 'nick': ['漫画群星：大集结.exe'], 'width': 0, 'height': 0, 'hwnd': ['漫画群星：大集结.exe'], 'capture': 'windows', 'connected': False, 'full_path': 'D:\\Python-wuwa\\Internal_1\\漫画群星：大集结.exe'}, 'leidian0': {'address': '127.0.0.1:5555', 'device': 'adb', 'full_path': 'E:/leidian/LDPlayer9/dnplayer.exe', 'connected': False, 'imei': 'leidian0', 'player_id': 0, 'nick': 'leidian0', 'emulator': EmulatorInstance(serial='127.0.0.1:5555', name='leidian0', path='E:/leidian/LDPlayer9/dnplayer.exe')}}
+2026-04-01 21:49:45,102 INFO global MainWindow:Window geometry updated in ok_config {'window_x': 508, 'window_y': 153, 'window_width': 1024, 'window_height': 664, 'window_maximized': False}
+2026-04-01 21:49:46,891 INFO RefreshAdb __main__:adb_connect try_connect 127.0.0.1:5555 cannot connect to 127.0.0.1:5555: 由于目标计算机积极拒绝，无法连接。 (10061)
+2026-04-01 21:49:46,915 INFO RefreshAdb DeviceManager:adb_connect 127.0.0.1:5555 not in device list []
+2026-04-01 21:49:46,917 INFO RefreshAdb DeviceManager:use adb capture {'address': '127.0.0.1:5555', 'device': 'adb', 'full_path': 'E:/leidian/LDPlayer9/dnplayer.exe', 'connected': False, 'imei': 'leidian0', 'player_id': 0, 'nick': 'leidian0', 'emulator': EmulatorInstance(serial='127.0.0.1:5555', name='leidian0', path='E:/leidian/LDPlayer9/dnplayer.exe')}
+2026-04-01 21:49:46,921 INFO RefreshAdb DeviceManager:ensure_hwnd for debugging {'address': '127.0.0.1:5555', 'device': 'adb', 'full_path': 'E:/leidian/LDPlayer9/dnplayer.exe', 'connected': False, 'imei': 'leidian0', 'player_id': 0, 'nick': 'leidian0', 'emulator': EmulatorInstance(serial='127.0.0.1:5555', name='leidian0', path='E:/leidian/LDPlayer9/dnplayer.exe')} (0, 0)
+2026-04-01 21:49:47,588 INFO global MainWindow:Window geometry updated in ok_config {'window_x': 80, 'window_y': 129, 'window_width': 1024, 'window_height': 664, 'window_maximized': False}
+2026-04-01 21:50:03,787 INFO MainThread MainWindow:Window closed exit_event.is not set False
+2026-04-01 21:50:03,788 INFO MainThread handler:handler stop raised exception global
+2026-04-01 21:50:03,790 INFO MainThread handler:handler stop raised exception StartCard
+2026-04-01 21:50:03,791 INFO MainThread handler:handler stop raised exception ok.gui.StartController
+2026-04-01 21:50:03,792 INFO MainThread handler:handler stop raised exception RefreshAdb
+2026-04-01 21:50:03,793 INFO MainThread TaskExecutor:Executor destroy
