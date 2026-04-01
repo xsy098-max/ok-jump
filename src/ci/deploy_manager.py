@@ -338,14 +338,27 @@ class DeployManager:
         try:
             from adbutils import adb
 
-            # 连接到模拟器
+            # 连接到模拟器（短超时，快速失败）
             adb.connect(f"127.0.0.1:{self.emulator_manager.adb_port}", timeout=5)
-            devices = adb.list()
+            devices = adb.device_list()
 
             if not devices:
                 return False
 
-            device = devices[0]
+            # 查找目标设备
+            adb_port = self.emulator_manager.adb_port
+            serial_patterns = [f"emulator-{adb_port}", f"127.0.0.1:{adb_port}"]
+            device = None
+            for dev in devices:
+                for pattern in serial_patterns:
+                    if pattern in dev.serial:
+                        device = dev
+                        break
+                if device:
+                    break
+
+            if device is None:
+                return False
 
             # 使用pidof命令检测进程
             result = device.shell(f"pidof {self.package_name}")

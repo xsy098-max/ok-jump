@@ -9,5 +9,5 @@
     "Start/Stop": "F9",
     "Kill Launcher after Start": false,
     "Launch with DX11": false,
-    "Windows Capture": "WGC"
+    "Windows Capture": "BitBlt"
 }

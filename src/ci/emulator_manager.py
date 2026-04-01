@@ -144,6 +144,8 @@ class EmulatorManager:
                     logger.info("模拟器启动成功")
                     # 额外等待系统稳定
                     time.sleep(3)
+                    # 刷新 ok 框架的设备连接
+                    self._refresh_ok_device_connection()
                     return True
                 time.sleep(2)
 
@@ -153,6 +155,39 @@ class EmulatorManager:
             raise EmulatorStartException("启动命令执行超时")
         except Exception as e:
             raise EmulatorStartException(f"启动模拟器失败: {e}")
+
+    def _refresh_ok_device_connection(self):
+        """
+        刷新 ok 框架的设备连接
+        
+        模拟器启动后，需要通知 ok 框架重新连接 ADB 设备
+        """
+        try:
+            from ok import og
+            from adbutils import adb
+            
+            # 先连接正确的端口
+            adb.connect(f"127.0.0.1:{self.adb_port}", timeout=10)
+            
+            # 检查 ok 框架的设备管理器
+            if hasattr(og, 'device') and og.device:
+                # 调用设备的刷新方法
+                device = og.device
+                if hasattr(device, 'do_refresh'):
+                    logger.info("刷新 ok 框架设备连接...")
+                    device.do_refresh()
+                    logger.info("ok 框架设备连接已刷新")
+                elif hasattr(device, 'refresh'):
+                    logger.info("刷新 ok 框架设备连接...")
+                    device.refresh()
+                    logger.info("ok 框架设备连接已刷新")
+                else:
+                    logger.debug("ok 设备对象没有刷新方法")
+            else:
+                logger.debug("ok 框架设备管理器未初始化")
+                
+        except Exception as e:
+            logger.warning(f"刷新 ok 框架设备连接失败: {e}")
 
     def stop_emulator(self) -> bool:
         """
@@ -217,15 +252,24 @@ class EmulatorManager:
         except Exception as e:
             logger.debug(f"检测模拟器状态失败: {e}")
 
-        # 方法2: 使用ADB检测设备连接
+        # 方法2: 使用ADB直接连接检测（使用配置的端口）
+        # 雷电模拟器使用 emulator-{port} 格式的序列号
         try:
             from adbutils import adb
-            devices = adb.list()
+            # 尝试两种连接格式：emulator-{port} 和 127.0.0.1:{port}
+            serial_patterns = [
+                f"emulator-{self.adb_port}",
+                f"127.0.0.1:{self.adb_port}"
+            ]
+            adb.connect(f"127.0.0.1:{self.adb_port}", timeout=5)
+            devices = adb.device_list()
             for device in devices:
-                if self.device_serial in str(device):
-                    return True
-        except Exception:
-            pass
+                for pattern in serial_patterns:
+                    if pattern in device.serial:
+                        logger.info(f"检测到模拟器设备: {device.serial}")
+                        return True
+        except Exception as e:
+            logger.debug(f"ADB检测模拟器状态失败: {e}")
 
         return False
 
@@ -245,25 +289,16 @@ class EmulatorManager:
         logger.info(f"开始安装APK: {apk_path}")
 
         try:
-            # 使用ADB安装
             from adbutils import adb
 
-            # 连接到模拟器
-            try:
-                adb.connect(f"127.0.0.1:{self.adb_port}", timeout=10)
-            except Exception as e:
-                logger.warning(f"ADB连接警告: {e}")
+            # 连接到模拟器（带重试）
+            device = self._wait_for_adb_device(timeout=30)
+            if device is None:
+                raise Exception("等待ADB设备连接超时")
 
-            # 获取设备
-            devices = adb.list()
-            if not devices:
-                raise Exception("未找到连接的设备")
-
-            device = devices[0]
-
-            # 安装APK
+            # 安装APK（使用 install 方法，而非 install_apk）
             logger.info("正在安装APK...")
-            result = device.install_apk(str(apk_path), nms=True, flags=["-r"])
+            result = device.install(str(apk_path), uninstall=True, flags=["-r", "-t"])
             logger.info(f"安装结果: {result}")
 
             logger.info("APK安装成功")
@@ -272,6 +307,55 @@ class EmulatorManager:
         except Exception as e:
             logger.error(f"APK安装失败: {e}")
             return False
+
+    def _wait_for_adb_device(self, timeout: int = 30) -> Optional[object]:
+        """
+        等待ADB设备连接就绪
+
+        模拟器重启后，ADB设备可能需要一些时间才能被识别。
+        此方法会重试连接直到超时。
+
+        Args:
+            timeout: 超时时间(秒)
+
+        Returns:
+            AdbDevice: 连接的设备对象，超时返回None
+        """
+        from adbutils import adb
+        import time
+
+        start_time = time.time()
+        serial_patterns = [
+            f"emulator-{self.adb_port}",
+            f"127.0.0.1:{self.adb_port}"
+        ]
+
+        while time.time() - start_time < timeout:
+            try:
+                # 尝试连接
+                adb.connect(f"127.0.0.1:{self.adb_port}", timeout=5)
+
+                # 获取设备列表
+                devices = adb.device_list()
+
+                # 查找匹配的设备
+                for dev in devices:
+                    for pattern in serial_patterns:
+                        if pattern in dev.serial:
+                            logger.info(f"ADB设备已就绪: {dev.serial}")
+                            return dev
+
+                # 设备列表不为空但没有匹配的设备
+                if devices:
+                    logger.debug(f"ADB设备列表: {[d.serial for d in devices]}，等待目标设备...")
+
+            except Exception as e:
+                logger.debug(f"ADB连接尝试失败: {e}")
+
+            time.sleep(2)
+
+        logger.error(f"等待ADB设备超时 ({timeout}秒)")
+        return None
 
     def uninstall_package(self) -> bool:
         """
@@ -283,15 +367,11 @@ class EmulatorManager:
         logger.info(f"开始卸载包: {self.package_name}")
 
         try:
-            from adbutils import adb
+            # 等待ADB设备就绪
+            device = self._wait_for_adb_device(timeout=30)
+            if device is None:
+                raise Exception("等待ADB设备连接超时")
 
-            # 连接到模拟器
-            adb.connect(f"127.0.0.1:{self.adb_port}", timeout=10)
-            devices = adb.list()
-            if not devices:
-                raise Exception("未找到连接的设备")
-
-            device = devices[0]
             device.uninstall(self.package_name)
 
             logger.info("包卸载成功")
@@ -314,15 +394,10 @@ class EmulatorManager:
         logger.info(f"开始启动游戏: {self.package_name}")
 
         try:
-            from adbutils import adb
-
-            # 连接到模拟器
-            adb.connect(f"127.0.0.1:{self.adb_port}", timeout=10)
-            devices = adb.list()
-            if not devices:
-                raise Exception("未找到连接的设备")
-
-            device = devices[0]
+            # 等待ADB设备就绪
+            device = self._wait_for_adb_device(timeout=30)
+            if device is None:
+                raise Exception("等待ADB设备连接超时")
 
             # 启动游戏Activity
             # 使用monkey命令启动
@@ -357,14 +432,11 @@ class EmulatorManager:
         logger.info(f"清除游戏数据: {self.package_name}")
 
         try:
-            from adbutils import adb
+            # 等待ADB设备就绪
+            device = self._wait_for_adb_device(timeout=30)
+            if device is None:
+                raise Exception("等待ADB设备连接超时")
 
-            adb.connect(f"127.0.0.1:{self.adb_port}", timeout=10)
-            devices = adb.list()
-            if not devices:
-                raise Exception("未找到连接的设备")
-
-            device = devices[0]
             device.shell(f"pm clear {self.package_name}")
 
             logger.info("游戏数据已清除")

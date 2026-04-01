@@ -871,20 +871,61 @@ class Phase2Handler:
     def _handle_mvp_scene(self) -> bool:
         """
         处理MVP场景（包含两次点击）
-        
+    
         第一次 MVP 点击 → 中间加载界面 → 第二次 MVP 点击
-        
+    
+        容错机制：
+        - 如果检测到已经是第二次MVP场景（點擊螢幕繼續），跳过第一次MVP点击
+        - 如果检测到新英雄场景，跳过整个MVP处理
+    
         Returns:
             bool: 是否成功
         """
         transition_timeout = self._cfg('战斗结束过渡容错(秒)', 20.0)
         mvp_timeout = self._cfg('MVP场景超时(秒)', 20.0)
-        
+    
         # 第一次 MVP 点击
         self._log(f"等待MVP场景出现（容错窗口: {transition_timeout}秒）...")
         time.sleep(2.0)  # 短暂等待战斗结束动画
-        
+    
+        # 【关键修复】先检测是否已经是第二次MVP场景或新英雄场景
+        # 这种情况可能发生在：战斗结束检测跳过了第一次MVP，或者游戏流程变化
+        if self._check_mvp_out2():
+            self._log("[容错] 检测到已是第二次MVP场景，跳过第一次MVP点击")
+            # 直接进行第二次MVP点击
+            self._log("检测第二次MVP场景...")
+            if not self._detect_and_click_mvp(
+                timeout=mvp_timeout,
+                simplified_text="点击荧幕继续",
+                traditional_text="點擊螢幕繼續",
+                feature_name=Features.TUTORIAL_MVP_OUT2
+            ):
+                self._log_error("第二次MVP点击失败")
+                self._save_error_screenshot("mvp_second_click_failed")
+                return False
+            self._log("第二次MVP点击成功，MVP场景处理完成")
+            return True
+    
+        if self._check_new_hero_scene():
+            self._log("[容错] 检测到新英雄场景，跳过MVP处理")
+            return True
+    
         if not self._detect_and_click_mvp(timeout=transition_timeout):
+            # 【容错】第一次MVP点击失败后，再检测一次是否已经是第二次MVP
+            if self._check_mvp_out2():
+                self._log("[容错] 第一次MVP检测失败后发现已是第二次MVP场景")
+                if not self._detect_and_click_mvp(
+                    timeout=mvp_timeout,
+                    simplified_text="点击荧幕继续",
+                    traditional_text="點擊螢幕繼續",
+                    feature_name=Features.TUTORIAL_MVP_OUT2
+                ):
+                    self._log_error("第二次MVP点击失败")
+                    self._save_error_screenshot("mvp_second_click_failed")
+                    return False
+                self._log("第二次MVP点击成功，MVP场景处理完成")
+                return True
+    
             self._log_error("第一次MVP点击失败")
             self._save_error_screenshot("mvp_first_click_failed")
             return False
