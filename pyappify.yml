@@ -9,7 +9,7 @@ profiles:
     requirements: "requirements.txt"
     use_pythonw: true
     show_add_defender: true
-    pip_args: "--timeout 300 --retries 3 --trusted-host pypi.tuna.tsinghua.edu.cn -i https://pypi.tuna.tsinghua.edu.cn/simple"
+    pip_args: "--timeout 300 --retries 3"
 
   - name: "Debug"
     git_url: "https://cnb.cool/xsy098-max/ok-jump.git"
