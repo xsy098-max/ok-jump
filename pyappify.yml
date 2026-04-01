@@ -9,7 +9,6 @@ profiles:
     requirements: "requirements.txt"
     use_pythonw: true
     show_add_defender: true
-    pip_args: "-i https://mirrors.aliyun.com/pypi/simple"
 
   - name: "Debug"
     git_url: "https://cnb.cool/xsy098-max/ok-jump.git"
