@@ -113,6 +113,36 @@
             "file_name": "images/login/skip.png",
             "height": 54,
             "width": 70
+        },
+        {
+            "id": 19,
+            "file_name": "images/new/fight_start.png",
+            "height": 69,
+            "width": 288
+        },
+        {
+            "id": 20,
+            "file_name": "images/new/fight_end.png",
+            "height": 75,
+            "width": 284
+        },
+        {
+            "id": 21,
+            "file_name": "images/new/out.png",
+            "height": 35,
+            "width": 182
+        },
+        {
+            "id": 22,
+            "file_name": "images/new/out2.png",
+            "height": 37,
+            "width": 188
+        },
+        {
+            "id": 23,
+            "file_name": "images/new/new_hero.png",
+            "height": 74,
+            "width": 220
         }
     ],
     "categories": [
@@ -300,6 +330,31 @@
             "id": 122,
             "name": "login_screen_ex_indicator",
             "supercategory": "login_ui"
+        },
+        {
+            "id": 304,
+            "name": "fight_start",
+            "supercategory": "tutorial_ui"
+        },
+        {
+            "id": 305,
+            "name": "fight_end",
+            "supercategory": "tutorial_ui"
+        },
+        {
+            "id": 306,
+            "name": "out",
+            "supercategory": "tutorial_ui"
+        },
+        {
+            "id": 307,
+            "name": "out2",
+            "supercategory": "tutorial_ui"
+        },
+        {
+            "id": 308,
+            "name": "new_hero",
+            "supercategory": "tutorial_ui"
         }
     ],
     "annotations": [
@@ -485,6 +540,46 @@
             "category_id": 122,
             "bbox": [0, 0, 70, 54],
             "area": 3780.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 23,
+            "image_id": 19,
+            "category_id": 304,
+            "bbox": [0, 0, 288, 69],
+            "area": 19872.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 24,
+            "image_id": 20,
+            "category_id": 305,
+            "bbox": [0, 0, 284, 75],
+            "area": 21300.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 25,
+            "image_id": 21,
+            "category_id": 306,
+            "bbox": [0, 0, 182, 35],
+            "area": 6370.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 26,
+            "image_id": 22,
+            "category_id": 307,
+            "bbox": [0, 0, 188, 37],
+            "area": 6956.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 27,
+            "image_id": 23,
+            "category_id": 308,
+            "bbox": [0, 0, 220, 74],
+            "area": 16280.0,
             "iscrowd": 0
         }
     ]
