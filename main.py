@@ -1,3 +1,13 @@
+import os
+# pyappify 启动时会移除 PATH 环境变量，导致 PySide6 初始化失败
+# 必须在导入其他模块前设置 PATH
+if 'PATH' not in os.environ:
+    # 使用常见的系统路径
+    os.environ['PATH'] = ';'.join([
+        os.environ.get('SystemRoot', r'C:\Windows') + r'\System32',
+        os.environ.get('SystemRoot', r'C:\Windows'),
+    ])
+
 import atexit
 import json
 import subprocess

@@ -71,7 +71,7 @@ config = {
     'config_folder': 'configs',
     'gui_icon': 'icons/icon.png',
     'gui_title': '漫画群星：大集结 - 自动化工具',
-    'version': '1.4.28',
+    'version': '1.4.29',
     
     # 自定义全局对象（用于 YOLO 检测等功能）
     'my_app': ['src.globals', 'Globals'],
