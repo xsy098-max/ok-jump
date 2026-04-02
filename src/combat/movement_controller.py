@@ -58,6 +58,10 @@ class MovementController:
         self.joystick_center = (0.214, 0.787)  # 摇杆中心相对位置 (410/1920, 850/1080)
         self.joystick_radius = 150  # 摇杆半径（像素）
         self.joystick_base_resolution = (1920, 1080)  # 基准分辨率
+
+        # 移动速度追踪（归一化到 1920x1080）
+        self._speed_samples = []       # 最近 N 次速度采样（像素/秒）
+        self._max_speed_samples = 10   # 滚动窗口大小
     
     def set_move_duration(self, duration):
         """
@@ -103,29 +107,30 @@ class MovementController:
             self.task.logger.debug(f"[移动] 获取窗口句柄失败: {e}")
         return None
     
-    def move_towards(self, target_x, target_y, self_x=None, self_y=None):
+    def move_towards(self, target_x, target_y, self_x=None, self_y=None, should_stop_callback=None):
         """
         向目标移动
-        
+
         Args:
             target_x, target_y: 目标坐标
             self_x, self_y: 自身坐标（可选，用于计算方向）
+            should_stop_callback: 可选回调函数，返回 True 时中断移动
         """
         if self.is_adb():
-            self._move_adb_towards(target_x, target_y)
+            self._move_adb_towards(target_x, target_y, self_x, self_y, should_stop_callback)
         else:
-            self._move_pc_towards(target_x, target_y, self_x, self_y)
-    
+            self._move_pc_towards(target_x, target_y, self_x, self_y, should_stop_callback)
+
     def move_away(self, target_x, target_y, self_x=None, self_y=None):
         """
         远离目标
-        
+
         Args:
             target_x, target_y: 目标坐标
             self_x, self_y: 自身坐标（可选）
         """
         if self.is_adb():
-            self._move_adb_away(target_x, target_y)
+            self._move_adb_away(target_x, target_y, self_x, self_y)
         else:
             self._move_pc_away(target_x, target_y, self_x, self_y)
     
@@ -165,7 +170,7 @@ class MovementController:
     
     # ==================== PC端移动（WASD键盘） ====================
     
-    def _move_pc_towards(self, target_x, target_y, self_x=None, self_y=None):
+    def _move_pc_towards(self, target_x, target_y, self_x=None, self_y=None, should_stop_callback=None):
         """PC端向目标移动"""
         # 获取自身位置
         if self_x is None or self_y is None:
@@ -177,17 +182,24 @@ class MovementController:
             else:
                 self.task.logger.warning("[移动] 无法获取帧，跳过移动")
                 return
-        
+
         # 计算方向
         dx = target_x - self_x
         dy = target_y - self_y
-        
+
         # 根据方向按键
         keys = self._calculate_keys(dx, dy)
         if keys:
             self.task.logger.info(f"[移动] 向目标移动: 自身({self_x}, {self_y}) -> 目标({target_x}, {target_y}), 偏移=({dx}, {dy}), 按键={'+'.join(keys)}")
-            self._press_movement_keys(keys)
-            self.task.logger.info(f"[移动] 移动执行完成: 按键 {'+'.join(keys)} 持续 {self.move_duration}秒")
+            if should_stop_callback:
+                interrupted = self.move_with_interrupt_check(keys, should_stop_callback)
+                if interrupted:
+                    self.task.logger.info(f"[移动] 被中断，已停止移动")
+                else:
+                    self.task.logger.info(f"[移动] 移动执行完成: 按键 {'+'.join(keys)} 持续 {self.move_duration}秒")
+            else:
+                self._press_movement_keys(keys)
+                self.task.logger.info(f"[移动] 移动执行完成: 按键 {'+'.join(keys)} 持续 {self.move_duration}秒")
         else:
             self.task.logger.info(f"[移动] 偏移太小，不移动: dx={dx}, dy={dy}")
     
@@ -558,69 +570,87 @@ class MovementController:
         scale = width / base_width
         return int(self.joystick_radius * scale)
     
-    def _move_adb_towards(self, target_x, target_y):
+    def _move_adb_towards(self, target_x, target_y, self_x=None, self_y=None, should_stop_callback=None):
         """
         手机端向目标移动（虚拟摇杆）
-        
-        【修复】直接向目标方向全速移动，而不是根据目标在屏幕上的位置来调整速度
+
+        支持可中断移动：传入 should_stop_callback 时，分段发送短 swipe，
+        每段之间检查回调，回调返回 True 时立即停止。
         """
         cx, cy = self._get_joystick_center_px()
         if cx is None:
             return
-        
+
         # 获取适配后的摇杆半径
         radius = self._get_joystick_radius_px()
 
-        # 获取屏幕尺寸和屏幕中心（自身位置始终在屏幕中心）
-        frame = self.task.frame
-        screen_w = frame.shape[1]
-        screen_h = frame.shape[0]
-        screen_center_x = screen_w / 2
-        screen_center_y = screen_h / 2
-        
-        # 【关键修复】计算从自身到目标的方向，并全速移动
-        # dx, dy 是目标相对于自身（屏幕中心）的方向向量
-        dx = target_x - screen_center_x
-        dy = target_y - screen_center_y
-        
+        # 获取自身位置：优先使用传入的坐标，回退到屏幕中心
+        if self_x is None or self_y is None:
+            frame = self.task.frame
+            if frame is not None:
+                self_x = frame.shape[1] / 2
+                self_y = frame.shape[0] / 2
+            else:
+                self.task.logger.warning("[ADB移动] 无法获取帧，跳过移动")
+                return
+
+        # 计算从自身到目标的方向向量
+        dx = target_x - self_x
+        dy = target_y - self_y
+
         # 计算方向长度
         length = math.sqrt(dx * dx + dy * dy)
-        
+
         if length < 1:
-            # 目标就在自身位置，不需要移动
             return
-        
-        
-        # 【关键修复】归一化方向向量，然后乘以摇杆半径
-        # 这样无论目标在哪里，都是全速移动
+
+        # 归一化方向向量，然后乘以摇杆半径（全速移动）
         dx_normalized = dx / length
         dy_normalized = dy / length
-        
+
         # 摇杆偏移 = 方向 * 半径（全速）
         joystick_dx = dx_normalized * radius
         joystick_dy = dy_normalized * radius
 
-        # 执行滑动（使用配置的移动持续时间）
+        # 执行滑动
         end_x = int(cx + joystick_dx)
         end_y = int(cy + joystick_dy)
-        
+
         # 计算角度用于日志
         angle = math.degrees(math.atan2(dy_normalized, dx_normalized))
-        self.task.logger.info(f"[ADB移动] 摇杆中心:({cx},{cy}), 半径:{radius}, 目标:({target_x},{target_y}), 方向角:{angle:.0f}°, 映射:({end_x},{end_y}), 全速移动")
-        self.task.swipe(cx, cy, end_x, end_y, duration=self.move_duration)
+        self.task.logger.info(f"[ADB移动] 摇杆中心:({cx},{cy}), 半径:{radius}, 目标:({target_x},{target_y}), 自身:({self_x:.0f},{self_y:.0f}), 方向角:{angle:.0f}°, 映射:({end_x},{end_y}), 全速移动")
 
-    def _move_adb_away(self, target_x, target_y):
+        if should_stop_callback:
+            # 可中断模式：分段发送短 swipe，每段之间检查回调
+            swipe_duration = min(0.1, self.move_duration)
+            start_time = time.time()
+            while time.time() - start_time < self.move_duration:
+                self.task.swipe(cx, cy, end_x, end_y, duration=swipe_duration, after_sleep=0)
+                if should_stop_callback():
+                    self.task.logger.info("[ADB移动] 检测到停止条件，中断移动")
+                    return
+                time.sleep(0.02)
+        else:
+            # 普通模式：单次 swipe
+            self.task.swipe(cx, cy, end_x, end_y, duration=self.move_duration)
+
+    def _move_adb_away(self, target_x, target_y, self_x=None, self_y=None):
         """手机端远离目标"""
         cx, cy = self._get_joystick_center_px()
         if cx is None:
             return
-        
+
         # 获取适配后的摇杆半径
         radius = self._get_joystick_radius_px()
 
-        frame = self.task.frame
-        self_x = frame.shape[1] // 2
-        self_y = frame.shape[0] // 2
+        # 获取自身位置：优先使用传入的坐标，回退到屏幕中心
+        if self_x is None or self_y is None:
+            frame = self.task.frame
+            if frame is not None:
+                self_x = frame.shape[1] // 2
+                self_y = frame.shape[0] // 2
+            else:
+                return
 
         # 计算相反方向
         dx = self_x - target_x
@@ -684,3 +714,86 @@ class MovementController:
         """手机端停止移动（释放摇杆）"""
         # ADB 模式下滑动结束即自动停止
         pass
+
+    # ==================== 移动速度追踪 ====================
+
+    def _get_resolution_scale(self):
+        """获取当前分辨率相对基准分辨率的缩放比"""
+        frame = self.task.frame
+        if frame is None:
+            return 1.0
+        current_width = frame.shape[1]
+        base_width = self.joystick_base_resolution[0]
+        return base_width / current_width
+
+    def record_movement(self, from_x, from_y, to_x, to_y, duration):
+        """
+        记录一次移动的速度采样
+
+        在战斗主循环中，移动前记录位置，移动后 YOLO 检测新位置，
+        调用此方法记录速度。速度归一化到 1920x1080 基准分辨率。
+
+        Args:
+            from_x, from_y: 移动前自身位置
+            to_x, to_y: 移动后自身位置
+            duration: 实际移动持续时间（秒）
+        """
+        if duration <= 0:
+            return
+
+        dx = to_x - from_x
+        dy = to_y - from_y
+        raw_distance = math.sqrt(dx * dx + dy * dy)
+
+        if raw_distance < 5:  # 忽略极小的移动（YOLO 抖动）
+            return
+
+        # 归一化到基准分辨率
+        scale = self._get_resolution_scale()
+        normalized_distance = raw_distance * scale
+        speed = normalized_distance / duration
+
+        self._speed_samples.append(speed)
+        if len(self._speed_samples) > self._max_speed_samples:
+            self._speed_samples.pop(0)
+
+    def get_average_speed(self):
+        """
+        获取平均移动速度（归一化像素/秒，基准 1920x1080）
+
+        Returns:
+            float: 平均速度，采样不足时返回 None
+        """
+        if len(self._speed_samples) < 2:
+            return None
+        return sum(self._speed_samples) / len(self._speed_samples)
+
+    def calculate_approach_duration(self, distance, skill_range=225):
+        """
+        根据实际移动速度计算到达技能范围边界所需的移动时间
+
+        计算结果与分辨率无关（归一化速度和归一化距离的 scale 抵消）。
+        公式：time = (distance - skill_range) / speed
+
+        Args:
+            distance: 当前与目标的距离（像素，当前分辨率）
+            skill_range: 技能释放范围（像素，当前分辨率），默认 225
+
+        Returns:
+            float: 建议移动时间（秒），采样不足时返回 None
+        """
+        speed = self.get_average_speed()
+        if speed is None or speed <= 0:
+            return None
+
+        remaining = distance - skill_range
+        if remaining <= 0:
+            return 0.05  # 已在范围内
+
+        # speed 是归一化速度，distance 是当前分辨率下的值
+        # 需要将 distance 也归一化后再除
+        scale = self._get_resolution_scale()
+        normalized_remaining = remaining * scale
+        time_needed = normalized_remaining / speed
+
+        return max(0.05, time_needed)

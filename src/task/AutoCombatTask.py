@@ -857,82 +857,120 @@ class AutoCombatTask(BaseJumpTriggerTask):
     def _handle_allies_only(self, self_pos, allies):
         """
         情况2：仅有友方、无敌军
-        
-        向友方移动，保持距离0~225像素
+
+        向友方移动，保持距离100~200像素
+        使用精准移动时间追踪友军，避免跟不上
         强制关闭自动技能
-        
+
         Args:
             self_pos: 自身位置（初始检测）
             allies: 已检测的友方列表（初始检测）
         """
         self.logger.debug("场上仅有友方，跟随友方移动...")
-        
+
         # 强制关闭自动技能（无敌人时不放技能）
         self.skill_ctrl.stop_auto_skills()
-        
+
         # 获取最近的友方（使用初始检测的数据）
         target = self._get_nearest_target(self_pos, allies)
         if not target:
             return
-        
-        # 持续跟随友方，直到发现敌人或超时（最多3秒）
-        max_follow_time = 3.0
+
+        # 持续跟随友方，直到发现敌人或超时（最多5秒）
+        max_follow_time = 5.0
         start_time = time.time()
-        
+
         while time.time() - start_time < max_follow_time:
             # 检查退出信号
             if self._should_exit():
                 return
-            
+
             # 检查战斗是否仍在激活状态
             if not self._is_combat_active():
                 self.logger.info("战斗已停止，退出友方跟随模式")
                 return
-            
+
             # 更新帧（获取最新画面）
             self.next_frame()
-            
+
             # 检查死亡状态
             if self.state_detector.is_death_detected():
                 self.movement_ctrl.stop()
                 return
-            
+
             # 检查是否出现敌人
             enemies = self.state_detector.detect_enemies()
             if enemies:
                 self.logger.info("发现敌人，退出友方跟随模式")
                 return
-            
+
             # 重新检测自身位置
             current_self = self.state_detector.detect_self_once()
             if current_self is None:
                 current_self = self_pos
-            
+
             # 重新检测友方位置
             current_allies = self.state_detector.detect_allies()
             if current_allies:
                 target = self._get_nearest_target(current_self, current_allies)
-            
+
             if not target:
                 return
-            
-            # 计算当前距离并调整
+
+            # 计算当前距离
             distance = self.distance_calc.calculate(current_self, target)
-            self.logger.info(f"最近友方距离: {distance:.0f}px，调整位置")
-            
-            direction = self.distance_calc.get_movement_direction(current_self, target, distance)
-            
-            if direction == "towards":
+
+            # 友方保持范围：100-200px，目标中点150px
+            ALLY_RANGE_MIN = 100
+            ALLY_RANGE_MAX = 200
+
+            if distance > ALLY_RANGE_MAX:
+                # 距离太远，需要靠近友方
+                self.logger.info(f"友方距离{distance:.0f}px > {ALLY_RANGE_MAX}px，靠近友方")
+
+                # 精准移动时间：基于速度计算到达友方范围的时间
+                original_duration = self.movement_ctrl.move_duration
+                precise_duration = self.movement_ctrl.calculate_approach_duration(
+                    distance, skill_range=ALLY_RANGE_MAX
+                )
+
+                if precise_duration is not None:
+                    move_time = max(0.05, min(precise_duration, original_duration))
+                    self.movement_ctrl.move_duration = move_time
+                # 没有速度数据时保持默认 move_duration
+
+                # 记录移动前位置（用于速度采集）
+                pos_before_x = current_self.center_x
+                pos_before_y = current_self.center_y
+
                 self.movement_ctrl.move_towards(
                     target.center_x, target.center_y,
                     current_self.center_x, current_self.center_y
                 )
-            elif direction == "away":
+
+                # 采集速度
+                try:
+                    self.next_frame()
+                    moved_self = self.state_detector.detect_self_once()
+                    if moved_self:
+                        self.movement_ctrl.record_movement(
+                            pos_before_x, pos_before_y,
+                            moved_self.center_x, moved_self.center_y,
+                            self.movement_ctrl.move_duration
+                        )
+                except Exception:
+                    pass
+
+                self.movement_ctrl.move_duration = original_duration
+
+            elif distance < ALLY_RANGE_MIN:
+                # 距离太近，远离友方
                 self.movement_ctrl.move_away(
                     target.center_x, target.center_y,
                     current_self.center_x, current_self.center_y
                 )
             else:
+                # 距离达标，停止移动
                 self.movement_ctrl.stop()
                 return  # 距离达标，退出
     
@@ -1154,24 +1192,54 @@ class AutoCombatTask(BaseJumpTriggerTask):
     def _maintain_distance(self, self_pos, target):
         """
         统一距离逻辑：保持0~225像素距离
-        
+
         1. 距离在0~225像素之间 → 停止移动，保持位置
         2. 距离 < 0像素 → 反向移动，远离目标（理论上不会发生）
-        3. 距离 > 225像素 → 正向移动，靠近目标
-        
+        3. 距离 > 225像素 → 正向移动，靠近目标（可中断）
+
         Args:
             self_pos: 自身位置
             target: 目标位置
         """
         distance = self.distance_calc.calculate(self_pos, target)
         direction = self.distance_calc.get_movement_direction(self_pos, target, distance)
-        
+
         if direction == "towards":
             self.logger.info(f"➡️ 距离{distance:.0f}px > 225px，靠近目标")
+
+            # 精准移动时间：基于实际移动速度计算到达技能范围边界所需时间
+            original_duration = self.movement_ctrl.move_duration
+            precise_duration = self.movement_ctrl.calculate_approach_duration(distance)
+
+            if precise_duration is not None:
+                move_time = max(0.05, min(precise_duration, original_duration))
+                self.movement_ctrl.move_duration = move_time
+            elif distance < 450:  # 速度数据不足但距离近，短移动保底
+                self.movement_ctrl.move_duration = 0.15
+
+            # 记录移动前位置（用于速度采集）
+            pos_before_x = self_pos.center_x
+            pos_before_y = self_pos.center_y
+
             self.movement_ctrl.move_towards(
                 target.center_x, target.center_y,
                 self_pos.center_x, self_pos.center_y
             )
+
+            # 采集速度：用下一帧检测移动后位置
+            try:
+                self.next_frame()
+                moved_self = self.state_detector.detect_self_once()
+                if moved_self:
+                    self.movement_ctrl.record_movement(
+                        pos_before_x, pos_before_y,
+                        moved_self.center_x, moved_self.center_y,
+                        self.movement_ctrl.move_duration
+                    )
+            except Exception:
+                pass
+
+            self.movement_ctrl.move_duration = original_duration
         elif direction == "away":
             self.logger.info(f"⬅️ 距离{distance:.0f}px < 0px，远离目标")
             self.movement_ctrl.move_away(

@@ -318,13 +318,22 @@ class Phase1Handler:
         """处理加载界面"""
         # 等待加载开始
         self.detector.detect_loading_start(timeout=10.0)
-        
+
         # 等待加载结束
         if self.detector.detect_loading_end(timeout=60.0):
-            # 加载后等待缓冲
+            # 加载后等待缓冲：边等边尝试检测自身，提前结束
             buffer_time = self._cfg('加载后等待时间(秒)', 30.0)
-            self._log(f"加载完成，等待 {buffer_time} 秒缓冲...")
-            time.sleep(buffer_time)
+            self._log(f"加载完成，缓冲等待（最多 {buffer_time} 秒）...")
+            buffer_start = time.time()
+            while time.time() - buffer_start < buffer_time:
+                self.task.next_frame()
+                # 尝试提前检测自身角色
+                self_pos = self.detector.detect_self(timeout=2.0)
+                if self_pos:
+                    self._log(f"缓冲期间提前检测到自身位置，跳过剩余等待")
+                    self.state_machine.transition_to(TutorialState.SELF_DETECTION)
+                    return
+                time.sleep(1.0)
             self.state_machine.transition_to(TutorialState.SELF_DETECTION)
         else:
             self._log_error("加载超时")
@@ -808,13 +817,11 @@ class Phase1Handler:
                 
                 # 根据战场状态处理
                 if state == BattlefieldState.NO_UNITS:
-                    # 无单位：检查技能监控线程是否最近检测到敌人
-                    if skill_ctrl.is_in_skill_range() and skill_ctrl.auto_skill_enabled:
-                        # 技能正在进行中，不随机移动，继续攻击
-                        self._log("战场无单位但技能仍在范围内，继续攻击")
-                        self.movement_ctrl.stop()
-                        skill_ctrl.start_auto_skills()
-                    elif hasattr(self, '_last_enemy_pos') and self._last_enemy_pos:
+                    # 无单位：敌人已消失，重置技能控制器避免残留旧距离数据
+                    skill_ctrl.update_distance(float('inf'))
+                    skill_ctrl.stop_auto_skills()
+
+                    if hasattr(self, '_last_enemy_pos') and self._last_enemy_pos:
                         # 有敌人最后位置，向该位置移动
                         last_x, last_y, last_time = self._last_enemy_pos
                         # 如果最后位置信息不超过5秒，向该位置移动
@@ -826,46 +833,71 @@ class Phase1Handler:
                         else:
                             # 最后位置信息过期，随机移动
                             self._last_enemy_pos = None
-                            skill_ctrl.stop_auto_skills()
-                            skill_ctrl.update_distance(9999)
                             self.movement_ctrl.stop()
                             directions = [
                                 (['W'], 3), (['S'], 2), (['A'], 2), (['D'], 2),
                                 (['W', 'A'], 2), (['W', 'D'], 2), (['S', 'A'], 1), (['S', 'D'], 1),
                             ]
                             weights = [w for _, w in directions]
-                            # 【修复】重置随机种子确保每次都是真正随机
                             random.seed()
                             keys = random.choices([d[0] for d in directions], weights=weights, k=1)[0]
                             self._log(f"随机移动: {'+'.join(keys)} 方向 (权重随机)")
                             self.movement_ctrl._press_movement_keys_for_duration(keys, 3.0)
                     else:
                         # 确实没有敌人信息，随机移动搜索
-                        skill_ctrl.stop_auto_skills()
-                        skill_ctrl.update_distance(9999)
                         self.movement_ctrl.stop()
                         directions = [
                             (['W'], 3), (['S'], 2), (['A'], 2), (['D'], 2),
                             (['W', 'A'], 2), (['W', 'D'], 2), (['S', 'A'], 1), (['S', 'D'], 1),
                         ]
                         weights = [w for _, w in directions]
-                        # 【修复】使用 random.randint 确保每次都是真正随机
-                        import random
-                        random.seed()  # 重置随机种子
+                        random.seed()
                         keys = random.choices([d[0] for d in directions], weights=weights, k=1)[0]
                         self._log(f"随机移动: {'+'.join(keys)} 方向 (权重随机)")
                         self.movement_ctrl._press_movement_keys_for_duration(keys, 3.0)
                 
                 elif state == BattlefieldState.ALLIES_ONLY:
-                    # 仅有友方：跟随友方
+                    # 仅有友方：跟随友方（精准移动）
                     skill_ctrl.stop_auto_skills()
                     if allies:
                         target = allies[0]
                         distance = self.distance_calc.calculate(self_pos, target)
-                        if distance > 200:
+
+                        ALLY_RANGE_MIN = 100
+                        ALLY_RANGE_MAX = 200
+
+                        if distance > ALLY_RANGE_MAX:
+                            # 距离太远，精准靠近友方
+                            original_duration = self.movement_ctrl.move_duration
+                            precise_duration = self.movement_ctrl.calculate_approach_duration(
+                                distance, skill_range=ALLY_RANGE_MAX
+                            )
+
+                            if precise_duration is not None:
+                                move_time = max(0.05, min(precise_duration, original_duration))
+                                self.movement_ctrl.move_duration = move_time
+
+                            pos_before_x = self_pos.center_x
+                            pos_before_y = self_pos.center_y
+
                             self.movement_ctrl.move_towards(target.center_x, target.center_y,
                                                            self_pos.center_x, self_pos.center_y)
-                        elif distance < 100:
+
+                            # 采集速度
+                            try:
+                                self.task.next_frame()
+                                moved_pos = state_detector.detect_self(timeout=0.5)
+                                if moved_pos:
+                                    self.movement_ctrl.record_movement(
+                                        pos_before_x, pos_before_y,
+                                        moved_pos.center_x, moved_pos.center_y,
+                                        self.movement_ctrl.move_duration
+                                    )
+                            except Exception:
+                                pass
+
+                            self.movement_ctrl.move_duration = original_duration
+                        elif distance < ALLY_RANGE_MIN:
                             self.movement_ctrl.move_away(target.center_x, target.center_y,
                                                         self_pos.center_x, self_pos.center_y)
                         else:
@@ -945,10 +977,10 @@ class Phase1Handler:
                             dx = smoothed_x - self_pos.center_x
                             dy = smoothed_y - self_pos.center_y
                             self._log(f"【移动方向】dx:{dx:+.0f}, dy:{dy:+.0f}, 目标:({smoothed_x},{smoothed_y}), 自身:({self_pos.center_x},{self_pos.center_y})")
-                                                    
+
                             # 【方向抖动检测】记录移动方向
                             self._record_move_direction(dx, dy)
-                                                    
+
                             # 【方向抖动检测】检测是否方向抖动
                             is_direction_jitter = self._detect_direction_jitter()
                             if is_direction_jitter:
@@ -957,10 +989,44 @@ class Phase1Handler:
                                 self._move_direction_history.clear()  # 清空方向历史
                                 time.sleep(0.1)
                                 continue
-                                                    
-                            # 【关键修复】使用平滑后的位置进行移动
-                            self.movement_ctrl.move_towards(smoothed_x, smoothed_y,
-                                                           self_pos.center_x, self_pos.center_y)
+
+                            # 精准移动时间：基于实际移动速度计算到达技能范围边界所需时间
+                            original_duration = self.movement_ctrl.move_duration
+                            precise_duration = self.movement_ctrl.calculate_approach_duration(skill_distance)
+
+                            if precise_duration is not None:
+                                # 有速度数据：精确计算移动时间
+                                move_time = max(0.05, min(precise_duration, original_duration))
+                                self.movement_ctrl.move_duration = move_time
+                                avg_speed = self.movement_ctrl.get_average_speed()
+                                self._log(f"【精准移动】速度={avg_speed:.0f}px/s, 距离={skill_distance:.0f}px, 精准时间={move_time:.2f}s")
+                            elif skill_distance < 450:
+                                # 速度数据不足但距离近：短移动保底
+                                self.movement_ctrl.move_duration = 0.15
+
+                            # 记录移动前位置（用于速度采集）
+                            pos_before_x = self_pos.center_x
+                            pos_before_y = self_pos.center_y
+
+                            self.movement_ctrl.move_towards(
+                                smoothed_x, smoothed_y,
+                                self_pos.center_x, self_pos.center_y
+                            )
+
+                            # 采集速度：用下一帧 YOLO 检测移动后位置
+                            try:
+                                self.task.next_frame()
+                                moved_pos = state_detector.detect_self(timeout=0.5)
+                                if moved_pos:
+                                    self.movement_ctrl.record_movement(
+                                        pos_before_x, pos_before_y,
+                                        moved_pos.center_x, moved_pos.center_y,
+                                        self.movement_ctrl.move_duration
+                                    )
+                            except Exception:
+                                pass
+
+                            self.movement_ctrl.move_duration = original_duration
                 
                 time.sleep(0.05)  # 主循环间隔
             

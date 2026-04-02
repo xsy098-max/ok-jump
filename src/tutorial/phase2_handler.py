@@ -1135,39 +1135,97 @@ class Phase2Handler:
             pass
         
         # OCR检测"新英雄"
-        if self._detect_text_bilingual("新英雄", "新英雄"):
+        if self._detect_text_bilingual("新英雄", "新角色"):
             return True
-        
+
         return False
-    
+
     # ==================== 步骤 2.7: 新英雄场景处理 ====================
-    
+
     def _handle_new_hero_scene(self) -> bool:
         """
         处理新英雄场景
-        
+
         需要同时检测到两个元素：
         - new_hero.png / "新英雄"
         - comfirm.png / "确定"
-        
+
+        容错机制：
+        - 如果检测到加载界面开始，说明游戏跳过了新英雄场景
+        - 如果检测到主界面元素，说明已直接进入主界面
+
         Returns:
             bool: 是否成功
         """
         transition_timeout = self._cfg('MVP过渡容错(秒)', 15.0)
         new_hero_timeout = self._cfg('新英雄场景超时(秒)', 20.0)
-        
+
+        # ========== 过渡期：边等边检测 ==========
         self._log(f"等待新英雄场景（容错窗口: {transition_timeout}秒）...")
-        time.sleep(transition_timeout)
-        
+        start_time = time.time()
+
+        while time.time() - start_time < transition_timeout:
+            if self._should_exit():
+                return False
+
+            self.task.next_frame()
+
+            # 容错：检测到加载界面 → 游戏跳过了新英雄场景
+            if self.detector.detect_loading_start(timeout=0.5):
+                self._log("[容错] 检测到加载界面，跳过新英雄场景")
+                return True
+
+            # 容错：检测到主界面 → 已直接进入主界面
+            if self._quick_check_main_interface():
+                self._log("[容错] 检测到主界面元素，跳过新英雄场景")
+                return True
+
+            # 检测新英雄标志（提前发现）
+            new_hero_found = False
+            try:
+                new_hero = self.task.find_one(Features.TUTORIAL_NEW_HERO, threshold=0.6)
+                if new_hero:
+                    new_hero_found = True
+                    self._log(f"[模板匹配] 检测到新英雄标志: ({new_hero.x}, {new_hero.y})")
+            except (ValueError, Exception):
+                pass
+
+            if not new_hero_found:
+                if self._detect_text_bilingual("新英雄", "新角色"):
+                    new_hero_found = True
+                    self._log("[OCR] 检测到新英雄文字")
+
+            if new_hero_found:
+                # 提前检测到新英雄，立即尝试点击确定
+                confirm_pos = self._find_confirm_button()
+                if confirm_pos:
+                    self._log(f"过渡期检测到新英雄场景，点击确定按钮: {confirm_pos}")
+                    self.task.click(confirm_pos[0], confirm_pos[1], after_sleep=1.5)
+                    self._log("新英雄场景处理完成")
+                    return True
+
+            time.sleep(0.3)
+
+        # ========== 正式检测期 ==========
         self._log(f"检测新英雄场景（超时: {new_hero_timeout}秒）...")
         start_time = time.time()
-        
+
         while time.time() - start_time < new_hero_timeout:
             if self._should_exit():
                 return False
-            
+
             self.task.next_frame()
-            
+
+            # 容错：检测到加载界面
+            if self.detector.detect_loading_start(timeout=0.5):
+                self._log("[容错] 检测到加载界面，跳过新英雄场景")
+                return True
+
+            # 容错：检测到主界面
+            if self._quick_check_main_interface():
+                self._log("[容错] 检测到主界面元素，跳过新英雄场景")
+                return True
+
             # 检测新英雄标志
             new_hero_found = False
             try:
@@ -1177,46 +1235,50 @@ class Phase2Handler:
                     self._log_verbose(f"[模板匹配] 检测到新英雄标志: ({new_hero.x}, {new_hero.y})")
             except (ValueError, Exception):
                 pass
-            
+
             if not new_hero_found:
                 # OCR备选
-                if self._detect_text_bilingual("新英雄", "新英雄"):
+                if self._detect_text_bilingual("新英雄", "新角色"):
                     new_hero_found = True
                     self._log_verbose("[OCR] 检测到新英雄文字")
-            
+
             if not new_hero_found:
                 time.sleep(0.2)
                 continue
-            
+
             # 检测确定按钮
-            confirm_pos = None
-            try:
-                confirm_btn = self.task.find_one(Features.TUTORIAL_CONFIRM_BUTTON, threshold=0.6)
-                if confirm_btn:
-                    confirm_pos = (confirm_btn.x + confirm_btn.width // 2, 
-                                   confirm_btn.y + confirm_btn.height // 2)
-                    self._log_verbose(f"[模板匹配] 检测到确定按钮: {confirm_pos}")
-            except (ValueError, Exception):
-                pass
-            
-            if not confirm_pos:
-                # OCR备选
-                confirm_pos = self._detect_text_bilingual("确定", "確定")
-                if confirm_pos:
-                    self._log_verbose(f"[OCR] 检测到确定文字: {confirm_pos}")
-            
+            confirm_pos = self._find_confirm_button()
+
             # 两个元素都检测到
-            if new_hero_found and confirm_pos:
+            if confirm_pos:
                 self._log(f"检测到新英雄场景，点击确定按钮: {confirm_pos}")
                 self.task.click(confirm_pos[0], confirm_pos[1], after_sleep=1.5)
                 self._log("新英雄场景处理完成")
                 return True
-            
+
             time.sleep(0.2)
-        
+
         self._log_error("新英雄场景检测超时")
         self._save_error_screenshot("new_hero_timeout")
         return False
+
+    def _find_confirm_button(self) -> Optional[Tuple[int, int]]:
+        """
+        检测确定按钮位置
+
+        Returns:
+            按钮中心坐标 (x, y)，未检测到返回 None
+        """
+        try:
+            confirm_btn = self.task.find_one(Features.TUTORIAL_CONFIRM_BUTTON, threshold=0.6)
+            if confirm_btn:
+                return (confirm_btn.x + confirm_btn.width // 2,
+                        confirm_btn.y + confirm_btn.height // 2)
+        except (ValueError, Exception):
+            pass
+
+        # OCR备选
+        return self._detect_text_bilingual("确定", "確定")
     
     # ==================== 步骤 2.8: 最终加载界面 ====================
     
@@ -1296,11 +1358,19 @@ class Phase2Handler:
                 return False
         else:
             self._log("未检测到最终加载界面，可能已加载完成")
-        
-        # 缓冲等待
-        self._log(f"加载后缓冲等待 {buffer_time}秒...")
-        time.sleep(buffer_time)
-        
+
+        # 缓冲等待：边等边检测主界面
+        self._log(f"加载后缓冲等待（最多 {buffer_time}秒）...")
+        buffer_start = time.time()
+        while time.time() - buffer_start < buffer_time:
+            if self._should_exit():
+                return False
+            self.task.next_frame()
+            if self._quick_check_main_interface():
+                self._log("[容错] 缓冲期间检测到主界面元素")
+                return True
+            time.sleep(0.5)
+
         return True
     
     def _quick_check_main_interface(self) -> bool:

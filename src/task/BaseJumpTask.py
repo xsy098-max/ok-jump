@@ -6,9 +6,21 @@ from ok import BaseTask, og
 from src.task.mixins import JumpTaskMixin
 from src.constants.features import Features
 from src.utils.BackgroundManager import background_manager
-from src.utils.BackgroundInputHelper import background_input
-from src.utils.PseudoMinimizeHelper import pseudo_minimize_helper
 from src.utils.LangConverter import LangConverter
+
+
+class _VirtualBox:
+    """虚拟 Box 对象，用于合并分开识别的 OCR 文本位置"""
+    __slots__ = ('x', 'y', 'width', 'height', 'name', 'center_x', 'center_y')
+
+    def __init__(self, x, y, w, h, name):
+        self.x = x
+        self.y = y
+        self.width = w
+        self.height = h
+        self.name = name
+        self.center_x = x + w // 2
+        self.center_y = y + h // 2
 
 
 class BaseJumpTask(BaseTask, JumpTaskMixin):
@@ -32,6 +44,9 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
         # 调用上下文（用于任务被其他任务调用时的状态管理）
         self._caller_task = None  # 调用者任务引用
         self._is_standalone = True  # 是否单独运行（默认True）
+        # 繁体中文配置缓存
+        self._traditional_chinese_cache = None
+        self._traditional_chinese_ts = 0
 
     def set_caller(self, caller_task):
         """
@@ -83,27 +98,31 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
         """
         return self._is_standalone
 
-    # ==================== 截图功能 ====================
+    # ==================== 坐标提取辅助 ====================
 
-    def take_screenshot(self):
+    @staticmethod
+    def _extract_click_coords(x, y=None):
         """
-        获取当前截图
+        从各种输入格式中提取点击坐标
+
+        支持 DetectionResult、Box 对象和原始坐标。
+
+        Args:
+            x: X坐标、检测结果对象或 Box 对象
+            y: Y坐标
 
         Returns:
-            numpy.ndarray: 当前帧图像，如果不可用则返回 None
+            tuple: (click_x, click_y) 绝对坐标
         """
-        if self.frame is not None:
-            self.screenshot = self.frame
-            return self.frame
-        return None
+        if hasattr(x, 'center_x'):
+            return x.center_x, x.center_y
+        elif hasattr(x, 'x') and hasattr(x, 'width'):
+            return x.x + x.width / 2, x.y + x.height / 2
+        return x, y
 
     def click_relative(self, x, y, *args, **kwargs):
         """
         点击相对坐标位置（智能后台支持）
-
-        根据游戏窗口状态自动选择最优的点击方式：
-        - 后台/伪最小化：使用 SendInput
-        - 前台：使用框架方法
 
         Args:
             x: 相对 X 坐标 (0-1)
@@ -113,21 +132,14 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
         Returns:
             点击操作的返回值
         """
-        # 检查是否需要后台点击
         if self._need_background_click():
             after_sleep = kwargs.get('after_sleep', 0.5)
             return self.background_click_relative(x, y, after_sleep=after_sleep)
-        
-        # 前台模式使用框架方法
         return super().click_relative(x, y, *args, **kwargs)
 
     def click(self, x, y=None, *args, **kwargs):
         """
         智能点击：后台模式使用 SendInput，前台模式使用框架方法
-
-        根据游戏窗口状态自动选择最优的点击方式：
-        - 后台/伪最小化：使用 SendInput 发送鼠标事件
-        - 前台：使用框架的点击方法
 
         Args:
             x: X坐标、检测结果对象或 Box 对象
@@ -137,22 +149,10 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
         Returns:
             点击操作的返回值
         """
-        # 检查是否需要后台点击
         if self._need_background_click():
-            # 处理 DetectionResult 对象
-            if hasattr(x, 'center_x'):
-                click_x, click_y = x.center_x, x.center_y
-            elif hasattr(x, 'x') and hasattr(x, 'width'):
-                # Box 对象
-                click_x = x.x + x.width / 2
-                click_y = x.y + x.height / 2
-            else:
-                click_x, click_y = x, y
-            
+            click_x, click_y = self._extract_click_coords(x, y)
             after_sleep = kwargs.get('after_sleep', 0.5)
             return self.background_click(int(click_x), int(click_y), after_sleep=after_sleep)
-        
-        # 前台模式使用框架方法
         return super().click(x, y, *args, **kwargs)
 
     # ==================== 场景检测 ====================
@@ -206,6 +206,53 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
 
         return self._logged_in
 
+    def _find_and_click_feature(self, feature_name, button_label, threshold=0.7, after_sleep=3):
+        """
+        查找特征按钮并点击
+
+        Args:
+            feature_name: 特征名称
+            button_label: 按钮中文标签（用于日志）
+            threshold: 匹配阈值
+            after_sleep: 点击后等待时间
+
+        Returns:
+            bool: True 如果找到并点击了按钮
+        """
+        try:
+            result = self.find_one(feature_name, threshold=threshold)
+            if result:
+                self.log_info(f"找到'{button_label}'按钮")
+                self.click(result)
+                self.sleep(after_sleep)
+                return True
+        except ValueError:
+            pass
+        return False
+
+    def _find_and_click_ocr(self, texts, pattern, button_label, after_sleep=3):
+        """
+        从OCR结果中查找文本并点击
+
+        Args:
+            texts: OCR识别结果列表
+            pattern: 匹配正则表达式
+            button_label: 按钮中文标签（用于日志）
+            after_sleep: 点击后等待时间
+
+        Returns:
+            bool: True 如果找到并点击了文本
+        """
+        if not texts:
+            return False
+        boxes = self.find_boxes(texts, match=pattern)
+        if boxes:
+            self.log_info(f"OCR找到'{button_label}'")
+            self.click(boxes[0])
+            self.sleep(after_sleep)
+            return True
+        return False
+
     def _handle_login_buttons(self):
         """
         处理登录按钮点击
@@ -213,44 +260,47 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
         Returns:
             bool: True 如果点击了任何按钮
         """
-        enter_game = self.find_one(Features.ENTER_GAME_BUTTON, threshold=0.7)
-        if enter_game:
-            self.log_info("找到'进入游戏'按钮")
-            self.click(enter_game)
-            self.sleep(3)
-            return True
+        # 优先使用特征匹配
+        for feature, label in [
+            (Features.ENTER_GAME_BUTTON, '进入游戏'),
+            (Features.START_GAME_BUTTON, '开始游戏'),
+            (Features.LOGIN_BUTTON, '登录'),
+        ]:
+            if self._find_and_click_feature(feature, label):
+                return True
 
-        start_game = self.find_one(Features.START_GAME_BUTTON, threshold=0.7)
-        if start_game:
-            self.log_info("找到'开始游戏'按钮")
-            self.click(start_game)
-            self.sleep(3)
-            return True
-
-        login_button = self.find_one(Features.LOGIN_BUTTON, threshold=0.7)
-        if login_button:
-            self.log_info("找到登录按钮")
-            self.click(login_button)
-            self.sleep(3)
-            return True
-
+        # 使用 OCR 匹配
         texts = self.ocr()
-        if texts:
-            # 使用 find_boxes 方法，它会自动调用 _convert_match_for_lang 进行简繁转换
-            enter_texts = self.find_boxes(texts, match=re.compile(r"进入游戏"))
-            if enter_texts:
-                self.log_info("OCR找到'进入游戏'")
-                self.click(enter_texts[0])
-                self.sleep(3)
+        for pattern, label in [
+            (re.compile(r"进入游戏"), '进入游戏'),
+            (re.compile(r"开始游戏"), '开始游戏'),
+        ]:
+            if self._find_and_click_ocr(texts, pattern, label):
                 return True
 
-            start_texts = self.find_boxes(texts, match=re.compile(r"开始游戏"))
-            if start_texts:
-                self.log_info("OCR找到'开始游戏'")
-                self.click(start_texts[0])
-                self.sleep(3)
-                return True
+        return False
 
+    @staticmethod
+    def _match_box_name(box_name, match):
+        """
+        检查 Box 名称是否匹配指定模式
+
+        Args:
+            box_name: OCR识别的文本
+            match: 匹配模式（str、re.Pattern 或 list）
+
+        Returns:
+            bool: 是否匹配
+        """
+        if isinstance(match, re.Pattern):
+            return match.search(box_name) is not None
+        elif isinstance(match, str):
+            return match in box_name
+        elif isinstance(match, list):
+            return any(
+                (m.search(box_name) is not None if isinstance(m, re.Pattern) else m in box_name)
+                for m in match
+            )
         return False
 
     def find_boxes(self, ocr_results, match=None, boundary=None):
@@ -271,36 +321,16 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
         # 根据游戏文本语言转换匹配模式
         match = self._convert_match_for_lang(match)
 
-        matched = []
-        for box in ocr_results:
-            if match:
-                if isinstance(match, re.Pattern):
-                    if match.search(box.name):
-                        matched.append(box)
-                elif isinstance(match, str):
-                    if match in box.name:
-                        matched.append(box)
-                elif isinstance(match, list):
-                    for m in match:
-                        if isinstance(m, re.Pattern):
-                            if m.search(box.name):
-                                matched.append(box)
-                                break
-                        elif m in box.name:
-                            matched.append(box)
-                            break
+        matched = [box for box in ocr_results if match and self._match_box_name(box.name, match)]
 
         if boundary and matched:
             if isinstance(boundary, str):
                 if boundary == 'bottom_right':
-                    screen_w = self.screen_width
-                    screen_h = self.screen_height
+                    screen_w, screen_h = self.screen_width, self.screen_height
                     matched = [b for b in matched if b.x > screen_w * 0.5 and b.y > screen_h * 0.5]
             else:
                 bx, by, bw, bh = boundary
-                matched = [b for b in matched if
-                          bx <= b.x <= bx + bw and
-                          by <= b.y <= by + bh]
+                matched = [b for b in matched if bx <= b.x <= bx + bw and by <= b.y <= by + bh]
 
         return matched
 
@@ -335,14 +365,12 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
         
         # 根据游戏语言设置决定优先顺序
         is_traditional = self._is_traditional_chinese()
-        if is_traditional:
-            # 繁体环境：优先繁体，其次简体
-            search_order = [traditional_text, simplified_text]
-            self.log_info(f"[OCR模糊匹配] 繁体环境，目标: '{target_text}', 繁体: '{traditional_text}', 简体: '{simplified_text}'")
-        else:
-            # 简体环境：优先简体，其次繁体
-            search_order = [simplified_text, traditional_text]
-            self.log_info(f"[OCR模糊匹配] 简体环境，目标: '{target_text}', 简体: '{simplified_text}', 繁体: '{traditional_text}'")
+        search_order = (
+            [traditional_text, simplified_text] if is_traditional
+            else [simplified_text, traditional_text]
+        )
+        self.log_info(f"[OCR模糊匹配] {'繁体' if is_traditional else '简体'}环境，"
+                      f"目标: '{target_text}', 简体: '{simplified_text}', 繁体: '{traditional_text}'")
 
         # 方法1: 完整匹配 - 查找包含完整目标文字的文本框（支持简繁双语）
         matched_boxes = self.find_boxes(ocr_results, match=target_text)
@@ -353,63 +381,41 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
                 return (box.x + box.width // 2, box.y + box.height // 2)
             return box
 
-        # 方法2: 分字匹配 - 按优先顺序尝试
+        # 方法2+3: 分字匹配 + 部分匹配（按优先顺序尝试）
         for search_text in search_order:
             chars = list(search_text)
             char_boxes = {}
-
-            self.log_info(f"[OCR模糊匹配] 分字匹配: 尝试 '{search_text}' -> {chars}")
 
             for t in ocr_results:
                 for char in chars:
                     if char in t.name and char not in char_boxes:
                         char_boxes[char] = t
-                        self.log_info(f"[OCR模糊匹配] 找到字符 '{char}' 在 '{t.name}' 中")
 
-            # 检查是否找到了所有单字
+            # 全部字符都找到 -> 合并位置（方法2）
             if len(char_boxes) == len(chars):
-                # 合并所有单字的位置
                 total_x = sum(t.x + t.width // 2 for t in char_boxes.values())
                 total_y = sum(t.y + t.height // 2 for t in char_boxes.values())
                 center_x = total_x // len(char_boxes)
                 center_y = total_y // len(char_boxes)
 
-                self.log_info(f"[OCR模糊匹配] '{target_text}' 被分开识别为 {list(char_boxes.keys())}，合并位置: ({center_x}, {center_y})")
+                self.log_info(f"[OCR模糊匹配] '{target_text}' 被分开识别为 {list(char_boxes.keys())}，"
+                              f"合并位置: ({center_x}, {center_y})")
 
                 if return_center:
                     return (center_x, center_y)
+                first_box = next(iter(char_boxes.values()))
+                return _VirtualBox(
+                    center_x - first_box.width // 2,
+                    center_y - first_box.height // 2,
+                    first_box.width, first_box.height, target_text
+                )
 
-                # 创建虚拟 Box 对象
-                class VirtualBox:
-                    def __init__(self, x, y, w, h, name):
-                        self.x = x
-                        self.y = y
-                        self.width = w
-                        self.height = h
-                        self.name = name
-                        self.center_x = x + w // 2
-                        self.center_y = y + h // 2
-
-                # 使用第一个字符的尺寸作为虚拟Box的尺寸
-                first_box = list(char_boxes.values())[0]
-                return VirtualBox(center_x - first_box.width // 2,
-                                center_y - first_box.height // 2,
-                                first_box.width, first_box.height, target_text)
-
-        # 方法3: 部分匹配 - 按优先顺序返回找到的第一个单字（最后尝试）
-        for search_text in search_order:
-            chars = list(search_text)
-            char_boxes = {}
-
-            for t in ocr_results:
-                for char in chars:
-                    if char in t.name and char not in char_boxes:
-                        char_boxes[char] = t
-
+            # 部分 -> 返回第一个找到的字符（方法3）
             for char in chars:
                 if char in char_boxes:
                     box = char_boxes[char]
-                    self.log_info(f"[OCR模糊匹配] 仅找到 '{char}' 字，位置: ({box.x + box.width // 2}, {box.y + box.height // 2})")
+                    self.log_info(f"[OCR模糊匹配] 仅找到 '{char}' 字，"
+                                  f"位置: ({box.x + box.width // 2}, {box.y + box.height // 2})")
                     if return_center:
                         return (box.x + box.width // 2, box.y + box.height // 2)
                     return box
@@ -429,7 +435,6 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
         Returns:
             tuple: (x, y) 位置，未找到返回 None
         """
-        import time
         start_time = time.time()
 
         while time.time() - start_time < timeout:
@@ -478,20 +483,25 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
 
     def _is_traditional_chinese(self) -> bool:
         """
-        检查游戏文本语言是否为繁体中文
+        检查游戏文本语言是否为繁体中文（带 5 秒缓存）
 
         Returns:
             bool: True 如果是繁体中文
         """
+        now = time.time()
+        if self._traditional_chinese_cache is not None and (now - self._traditional_chinese_ts) < 5:
+            return self._traditional_chinese_cache
+
         try:
             from config import basic_config_option
             config = self.get_global_config(basic_config_option)
-            lang = config.get('游戏文本语言', '简体中文')
-            is_traditional = lang == '繁体中文'
-            return is_traditional
+            self._traditional_chinese_cache = config.get('游戏文本语言', '简体中文') == '繁体中文'
         except Exception as e:
             self.log_error(f"获取游戏文本语言配置失败: {e}")
-            return False
+            self._traditional_chinese_cache = False
+
+        self._traditional_chinese_ts = now
+        return self._traditional_chinese_cache
 
     def wait_until(self, condition, time_out=10, pre_action=None, post_action=None, raise_if_not_found=False):
         """
@@ -559,25 +569,3 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
         if esc:
             self.back(after_sleep=2)
         return False
-
-    # ==================== 伪最小化功能 ====================
-
-    def pseudo_minimize(self):
-        """执行伪最小化"""
-        background_manager.pseudo_minimize()
-
-    def pseudo_restore(self):
-        """从伪最小化恢复"""
-        return background_manager.pseudo_restore()
-
-    def toggle_pseudo_minimize(self):
-        """切换伪最小化状态"""
-        return background_manager.toggle_pseudo_minimize()
-
-    def is_pseudo_minimized(self):
-        """检查是否处于伪最小化状态"""
-        return background_manager.is_pseudo_minimized()
-
-    def ensure_visible_for_capture(self):
-        """确保窗口可见以便截图"""
-        return background_manager.ensure_visible_for_capture()
