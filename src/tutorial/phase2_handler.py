@@ -469,39 +469,21 @@ class Phase2Handler:
     def _run_combat_with_end_detection(self) -> bool:
         """
         运行自动战斗，同时并行检测战斗结束
-    
-        如果GUI中已开启自动战斗，则跳过启动战斗线程，只进行战斗结束检测
-        但需要确保GUI自动战斗已进入战斗执行状态（检测到自身）
-    
+
+        Phase2 始终创建自己的 AutoCombatTask 实例（强制测试模式=True），
+        因为第二阶段已通过双加载+战斗开始检测确认处于战斗场景。
+        不复用 GUI 自动战斗实例，避免 GUI 的状态感知主循环
+        在教程场景中因 SELF 检测失败而无法进入战斗。
+
         Returns:
             bool: 是否成功
         """
-        from src.task.AutoCombatTask import AutoCombatTask
-    
         combat_timeout = self._cfg('第二阶段战斗超时(秒)', 210.0)
-        gui_combat_running = AutoCombatTask.is_running()
-    
-        if gui_combat_running:
-            self._log("检测到GUI自动战斗已运行")
-            self._combat_task = AutoCombatTask.get_running_instance()
-                
-            # 【关键修复】等待GUI自动战斗进入战斗执行状态
-            # GUI自动战斗使用状态感知主循环，需要检测到自身才会启动战斗线程
-            # 这里需要等待它真正进入战斗状态
-            if not self._wait_gui_combat_active(timeout=30.0):
-                self._log("GUI自动战斗未能在超时内进入战斗状态，启动自己的战斗线程")
-                gui_combat_running = False
-                # 启动自己的战斗线程
-                if not self._start_combat_thread():
-                    return False
-            else:
-                self._log("GUI自动战斗已进入战斗执行状态，仅进行战斗结束检测")
-        else:
-            self._log(f"启动自动战斗线程（超时: {combat_timeout}秒）...")
-            # 启动自动战斗线程
-            if not self._start_combat_thread():
-                return False
-        
+
+        self._log(f"启动自动战斗线程（超时: {combat_timeout}秒）...")
+        if not self._start_combat_thread():
+            return False
+
         # 启动结束检测线程
         self._start_end_detection_thread(combat_timeout)
         
@@ -523,7 +505,7 @@ class Phase2Handler:
         
         # 【关键修复】只停止自己启动的战斗实例，不影响 GUI 自动战斗触发器
         # GUI 触发器由用户控制启停，第二阶段不应干预
-        self._stop_combat(stop_gui_combat=False)
+        self._stop_combat()
         
         with self._combat_end_lock:
             if self._combat_end_detected:
@@ -579,51 +561,6 @@ class Phase2Handler:
         
         return default
     
-    def _wait_gui_combat_active(self, timeout: float = 30.0) -> bool:
-        """
-        等待GUI自动战斗进入战斗执行状态
-
-        GUI自动战斗使用状态感知主循环，需要通过YOLO检测到自身才会启动战斗线程。
-        此方法等待战斗线程真正启动。
-
-        Args:
-            timeout: 超时时间（秒）
-
-        Returns:
-            bool: 是否成功进入战斗状态
-        """
-        if self._combat_task is None:
-            return False
-
-        start_time = time.time()
-        check_count = 0
-
-        self._log(f"等待GUI自动战斗进入战斗执行状态（超时: {timeout}秒）...")
-
-        while time.time() - start_time < timeout:
-            if self._should_exit():
-                return False
-
-            check_count += 1
-
-            # 检查战斗线程是否激活
-            if hasattr(self._combat_task, '_is_combat_active'):
-                if self._combat_task._is_combat_active():
-                    self._log(f"GUI自动战斗已激活战斗线程（检查{check_count}次后确认）")
-                    return True
-
-            # 每5次检查输出一次状态
-            if check_count % 5 == 0:
-                elapsed = time.time() - start_time
-                self._log(f"等待中... 已检查{check_count}次, 耗时{elapsed:.1f}秒")
-
-            # 更新帧，让GUI自动战斗能够检测到自身
-            self.task.next_frame()
-            time.sleep(0.1)
-
-        self._log(f"等待超时，共检查{check_count}次")
-        return False
-
     def _start_combat_thread(self) -> bool:
         """启动自动战斗线程"""
         try:
@@ -651,12 +588,10 @@ class Phase2Handler:
                 default_value = self._combat_task.default_config.get(key)
                 self._combat_task.config[key] = self._get_combat_config(key, default_value)
             
-            # 设置测试模式（跳过游戏场景检测）
+            # Phase2 已确认在战斗中（双加载+战斗开始检测），强制测试模式开启
+            # 跳过场景检测，直接进入战斗循环
             self._combat_task.config['测试模式'] = True
-            
-            # 记录当前配置（用于调试）
-            move_duration = self._combat_task.config.get('移动持续时间(秒)', 0.5)
-            self._log(f"已启用测试模式，移动持续时间: {move_duration}秒")
+            self._log(f"强制测试模式开启，移动持续时间: {self._combat_task.config.get('移动持续时间(秒)', 0.5)}秒")
             
             # 在独立线程中运行
             self._combat_thread = threading.Thread(
@@ -681,82 +616,33 @@ class Phase2Handler:
         except Exception as e:
             self._log_error(f"[Phase2CombatThread] 自动战斗异常: {e}")
     
-    def _stop_combat(self, stop_gui_combat=False):
-        """停止自动战斗
-        
-        Args:
-            stop_gui_combat: 是否停止 GUI 自动战斗触发器（默认 False，不影响 GUI）
-        
-        注意：此方法默认只停止 phase2_handler 自己创建的战斗实例。
-        GUI 自动战斗触发器由用户控制，不应在第二阶段结束时关闭。
-        """
-        # 如果是自己启动的战斗线程，停止它
+    def _stop_combat(self):
+        """停止自动战斗（只停止 Phase2 自己创建的战斗实例，不影响 GUI 触发器）"""
         if self._combat_thread and self._combat_task:
-            self._log("停止自己启动的战斗线程...")
+            self._log("停止自动战斗线程...")
             self._combat_task._exit_requested = True
-            
-            # 【关键修复】完整停止所有战斗相关组件
-            
-            # 1. 停止移动控制器
+
+            # 停止移动控制器
             if hasattr(self._combat_task, 'movement_ctrl') and self._combat_task.movement_ctrl:
                 self._combat_task.movement_ctrl.stop()
-            
-            # 2. 完全关闭技能控制器（停止线程）
+
+            # 关闭技能控制器
             if hasattr(self._combat_task, 'skill_ctrl') and self._combat_task.skill_ctrl:
                 self._combat_task.skill_ctrl.shutdown()
-            
-            # 3. 重置战斗状态
+
+            # 重置战斗状态
             if hasattr(self._combat_task, 'state_detector') and self._combat_task.state_detector:
                 self._combat_task.state_detector.reset_combat_state()
-            
-            # 4. 停止死亡监控线程
+
+            # 停止死亡监控
             if hasattr(self._combat_task, 'state_detector') and self._combat_task.state_detector:
                 self._combat_task.state_detector.stop_death_monitor()
-            
+
             # 等待线程结束
             if self._combat_thread.is_alive():
                 self._combat_thread.join(timeout=3.0)
-            
-            self._log("自己启动的战斗线程已停止")
-        
-        
-        # 【重要】默认不停止 GUI 自动战斗触发器
-        # GUI 触发器由用户控制启停，第二阶段不应干预
-        # 只有在明确需要时（stop_gui_combat=True）才停止 GUI 触发器
-        # 这种情况极少见，通常只在程序退出时使用
-        if stop_gui_combat:
-            from src.task.AutoCombatTask import AutoCombatTask
-            gui_combat_task = AutoCombatTask.get_running_instance()
-            if gui_combat_task:
-                # 确认是 GUI 触发器，不是自己创建的实例
-                if gui_combat_task is not self._combat_task:
-                    self._log("停止 GUI 自动战斗触发器...")
-                    
-                    # 设置退出标志
-                    gui_combat_task._exit_requested = True
-                    
-                    # 停止战斗执行线程
-                    if hasattr(gui_combat_task, '_stop_combat_thread'):
-                        gui_combat_task._stop_combat_thread()
-                    
-                    # 停止移动控制器
-                    if hasattr(gui_combat_task, 'movement_ctrl') and gui_combat_task.movement_ctrl:
-                        gui_combat_task.movement_ctrl.stop()
-                    
-                    # 关闭技能控制器
-                    if hasattr(gui_combat_task, 'skill_ctrl') and gui_combat_task.skill_ctrl:
-                        gui_combat_task.skill_ctrl.shutdown()
-                    
-                    # 重置战斗状态
-                    if hasattr(gui_combat_task, 'state_detector') and gui_combat_task.state_detector:
-                        gui_combat_task.state_detector.reset_combat_state()
-                    
-                    # 停止死亡监控
-                    if hasattr(gui_combat_task, 'state_detector') and gui_combat_task.state_detector:
-                        gui_combat_task.state_detector.stop_death_monitor()
-                    
-                    
-                    self._log("GUI 自动战斗触发器已停止")
+
+            self._log("自动战斗线程已停止")
     
     def _start_end_detection_thread(self, timeout: float):
         """启动结束检测线程"""

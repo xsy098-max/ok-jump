@@ -156,17 +156,18 @@ def patch_start_controller():
     # Patch start method to track current task
     original_start = getattr(StartController, 'start', None)
     
-    def patched_start(self, task):
-        self.current_task = task
-        # Check if this task is self-managed
-        task_class_name = task.__class__.__name__
-        if task_class_name in SELF_MANAGED_TASKS:
-            logger.info(f'Self-managed task detected: {task_class_name}, device check will be skipped')
-            # 对于自管理任务，先启动模拟器并连接 ADB
-            # 这样 TaskExecutor 才能获取截图
-            _pre_start_emulator_for_task(task)
+    def patched_start(self, task=None, exit_after=False):
+        if task is not None:
+            self.current_task = task
+            # Check if this task is self-managed
+            task_class_name = task.__class__.__name__
+            if task_class_name in SELF_MANAGED_TASKS:
+                logger.info(f'Self-managed task detected: {task_class_name}, device check will be skipped')
+                # 对于自管理任务，先启动模拟器并连接 ADB
+                # 这样 TaskExecutor 才能获取截图
+                _pre_start_emulator_for_task(task)
         if original_start:
-            return original_start(self, task)
+            return original_start(self, task, exit_after)
 
     if original_start:
         StartController.start = patched_start

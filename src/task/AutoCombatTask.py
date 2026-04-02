@@ -159,6 +159,8 @@ class AutoCombatTask(BaseJumpTriggerTask):
             '技能2间隔(秒)': 3.0,
             '大招间隔(秒)': 5.0,
             '移动持续时间(秒)': 0.5,  # 每次移动按键持续的时间
+            '卡住检测': True,   # 检测角色是否卡住（连续相同坐标）
+            '抖动检测': True,   # 检测A-B-A-B位置抖动模式
         })
         
         self.config_description = {
@@ -169,6 +171,8 @@ class AutoCombatTask(BaseJumpTriggerTask):
             '自动技能2': '启用后自动释放技能2',
             '自动大招': '启用后自动释放大招',
             '移动持续时间(秒)': '每次移动按键的持续时间，值越大移动距离越长',
+            '卡住检测': '检测角色是否卡住（连续多次坐标不变），启用后自动尝试摆脱',
+            '抖动检测': '检测A-B-A-B位置抖动模式，启用后自动执行随机移动摆脱',
         }
         
         # 日志计数器（用于定期输出状态摘要）
@@ -245,15 +249,13 @@ class AutoCombatTask(BaseJumpTriggerTask):
         
         # 初始化控制器
         self._init_controllers()
-        
-        # 启动死亡状态并行监控
-        self.state_detector.start_death_monitor()
-        self.logger.info("死亡状态监控线程已启动")
-        
+
         if test_mode:
-            # 测试模式：跳过场景检测，直接进入主循环
-            self.logger.info("测试模式：跳过场景检测，直接启动战斗主循环")
-            self._main_loop()
+            # 测试模式：直接进入战斗循环（无需状态感知启停）
+            self.logger.info("测试模式：跳过场景检测，直接启动战斗循环")
+            with self._combat_lock:
+                self._combat_active = True
+            self._combat_loop()
         else:
             # 正常模式：通过YOLO自身检测动态启停战斗
             self.logger.info("正常模式：启动战斗状态检测主循环")
@@ -305,14 +307,18 @@ class AutoCombatTask(BaseJumpTriggerTask):
     
     def _should_exit(self):
         """检测是否应该退出自动战斗"""
+        # 检测框架退出信号（窗口关闭等）
+        if hasattr(self, 'exit_is_set') and self.exit_is_set():
+            return True
+
         # 检测退出请求
         if self._exit_requested:
             return True
-        
+
         # 测试模式下不检测场景（只响应退出请求）
         if self.config.get('测试模式', False):
             return False
-        
+
         # 非测试模式：不再使用 in_game() 检测，由状态感知主循环处理
         return False
     
@@ -517,14 +523,15 @@ class AutoCombatTask(BaseJumpTriggerTask):
     def _start_combat_thread(self):
         """
         启动战斗执行线程
-        
+
         在独立的线程中运行战斗主循环
+        死亡检测已合并到主循环，不再启动独立监控线程
         """
         with self._combat_lock:
             if self._combat_active:
                 self.logger.warning("战斗线程已在运行中")
                 return
-            
+
             self._combat_active = True
             self._combat_thread = threading.Thread(
                 target=self._combat_loop,
@@ -532,120 +539,255 @@ class AutoCombatTask(BaseJumpTriggerTask):
                 daemon=True
             )
             self._combat_thread.start()
-            self.logger.info("战斗执行线程已启动")
+
+        self.logger.info("战斗执行线程已启动")
     
     def _stop_combat_thread(self):
         """
         停止战斗执行线程
-        
+
         停止战斗循环并清理相关资源
+        死亡检测已合并到主循环，无需额外停止
         """
         # 先设置标志位（需要在锁外操作避免死锁）
         with self._combat_lock:
             if not self._combat_active:
                 return
             self._combat_active = False
-        
+
         # 停止技能和移动（在锁外操作）
         if self.skill_ctrl:
             self.skill_ctrl.stop_auto_skills()
         if self.movement_ctrl:
             self.movement_ctrl.stop()
-        
+
         # 等待线程结束（在锁外操作，避免死锁）
         if self._combat_thread and self._combat_thread.is_alive():
             self._combat_thread.join(timeout=2.0)
-        
+
         self.logger.info("战斗执行线程已停止")
     
     def _combat_loop(self):
         """
         战斗执行循环（在独立线程中运行）
-        
-        当检测到进入战斗状态时，执行此循环
+
+        扁平化单循环设计：
+        - 每轮 1 次截帧 + 1 次 YOLO 推理（label=-1 全量检测）
+        - 死亡检测合并到主循环（带防抖）
+        - 无内层 while 循环，距离检测自然在下一轮完成
         """
         verbose = self.config.get('详细日志', False)
         self.logger.info("战斗执行循环开始")
-        
-        # 自身位置丢失计数器（连续多次丢失才检测战斗结束）
+
+        # === 状态计数器 ===
         self_lost_count = 0
-        self_lost_threshold = 10  # 连续10次检测不到自身才检测战斗结束
-        
+        self_lost_threshold = 10
+
+        # 死亡防抖（同原死亡监控线程逻辑）
+        consecutive_death = 0
+        consecutive_alive = 0
+        death_confirmed = False
+
+        # 敌人记忆防抖（2秒内曾检测到敌人则视为短暂丢失）
+        last_enemy_seen_time = None
+        ENEMY_MEMORY_TIMEOUT = 2.0
+
+        # 技能生命周期（只在状态切换时 start/stop）
+        skills_active = False
+
+        # 速度采集
+        prev_self_pos = None
+        prev_move_duration = 0.0
+
+        # 目标锁定
+        locked_target_center = None
+        target_lost_count = 0
+        TARGET_LOCK_THRESHOLD = 200   # 锁定匹配阈值（像素曼哈顿距离）
+        TARGET_LOST_MAX = 3           # 连续丢失 N 帧后重新锁定
+
         while self._is_combat_active() and not self._should_exit():
             try:
-                # 检查死亡状态
-                if self.state_detector.is_death_detected():
-                    self.logger.warning("战斗中检测到死亡状态，等待复活...")
-                    self.skill_ctrl.stop_auto_skills()
-                    self.movement_ctrl.stop()
+                # ====== 1. 截帧 + 全量检测（1帧 + 1 YOLO）======
+                self.next_frame()
+                self_pos, allies, enemies, has_death = self.state_detector.detect_all_once()
+
+                # ====== 2. 死亡检测（带防抖，合并到主循环）======
+                if has_death:
+                    consecutive_death += 1
+                    consecutive_alive = 0
+                    if consecutive_death >= 2 and not death_confirmed:
+                        death_confirmed = True
+                        self.logger.warning("战斗中确认死亡状态，等待复活...")
+                        self.skill_ctrl.stop_auto_skills()
+                        self.movement_ctrl.stop()
+                else:
+                    consecutive_alive += 1
+                    consecutive_death = 0
+                    if consecutive_alive >= 3 and death_confirmed:
+                        self.logger.info("检测到复活状态")
+                        death_confirmed = False
+
+                if death_confirmed:
                     time.sleep(1)
                     continue
-                
-                # 更新帧（确保使用最新画面）
-                self.next_frame()
-                
-                # 检测自身位置
-                self_pos = self.state_detector.detect_self_once()
+
+                # ====== 3. 自身丢失处理 ======
                 if self_pos is None:
                     self_lost_count += 1
-                    
-                    # 连续多次丢失，检测战斗是否结束
                     if self_lost_count >= self_lost_threshold:
                         self.logger.info(f"连续{self_lost_count}次未检测到自身位置，检测战斗是否结束...")
                         if self._detect_battle_end():
                             self.logger.info("检测到战斗结束标志，设置退出标志")
                             self._exit_requested = True
                             break
-                    
                     if verbose:
-                        self.logger.debug(f"战斗循环中自身位置丢失 ({self_lost_count}/{self_lost_threshold})")
+                        self.logger.debug(f"自身位置丢失 ({self_lost_count}/{self_lost_threshold})")
                     time.sleep(0.1)
                     continue
-                
-                
-                # 重置丢失计数器
+
                 self_lost_count = 0
-                
-                # 检测战场状态
-                state, allies, enemies = self.state_detector.get_battlefield_state_detailed()
-                self._last_state = state.value
-                
-                # 更新距离（检测所有敌人）
+
+                # ====== 4. 速度采集 ======
+                if prev_self_pos is not None and prev_move_duration > 0:
+                    try:
+                        self.movement_ctrl.record_movement(
+                            prev_self_pos.center_x, prev_self_pos.center_y,
+                            self_pos.center_x, self_pos.center_y,
+                            prev_move_duration
+                        )
+                    except Exception:
+                        pass
+                    prev_move_duration = 0.0
+                prev_self_pos = self_pos
+
+                # ====== 5. 距离计算（仅一次）======
+                skill_distance = float('inf')
+                has_enemy_in_range = False
+
                 if enemies:
-                    distance = self._get_skill_distance(self_pos, enemies)
-                    self.skill_ctrl.update_distance(distance)
-                    # 记录敌人最后位置
+                    skill_distance = self._get_skill_distance(self_pos, enemies)
+                    has_enemy_in_range = skill_distance <= 225
+
+                    # 更新敌人最后位置
                     nearest_enemy = self._get_nearest_target(self_pos, enemies)
                     if nearest_enemy:
                         self._last_enemy_pos = (nearest_enemy.center_x, nearest_enemy.center_y, time.time())
-                
-                
-                # 【卡住/抖动检测】只有在没有敌人在技能范围内时才执行
-                has_enemy_in_range = False
+
+                    # 记忆：最后看到敌人的时间
+                    last_enemy_seen_time = time.time()
+
+                self.skill_ctrl.update_distance(skill_distance)
+
+                # ====== 6. 技能启停（只在状态切换时调用）======
                 if enemies:
-                    distance = self._get_skill_distance(self_pos, enemies)
-                    if distance <= 225:  # 技能范围 0-225px
-                        has_enemy_in_range = True
-                
-                if not has_enemy_in_range:
-                    # 执行卡住/抖动检测
+                    if not skills_active:
+                        self.skill_ctrl.start_auto_skills()
+                        skills_active = True
+                else:
+                    if skills_active:
+                        self.skill_ctrl.stop_auto_skills()
+                        skills_active = False
+
+                # ====== 7. 战场处理 ======
+                if enemies and has_enemy_in_range:
+                    # 敌人在技能范围内 → 站桩输出
+                    self.movement_ctrl.stop()
+                    if verbose:
+                        self.logger.debug(f"敌人在范围内({skill_distance:.0f}px)，站桩输出")
+
+                elif enemies and not has_enemy_in_range:
+                    # 敌人不在范围内 → 单步移动（含目标锁定 + 卡住/抖动检测）
                     if self._handle_stuck_or_jitter(self_pos):
-                        # 执行了摆脱操作，继续下一次循环
                         time.sleep(0.1)
                         continue
-                
-                
-                # 处理战场状态
-                self._handle_battlefield_state(state, self_pos, allies, enemies)
-                
+
+                    target = self._find_locked_target(
+                        self_pos, enemies, locked_target_center, target_lost_count,
+                        TARGET_LOCK_THRESHOLD, TARGET_LOST_MAX
+                    )
+                    # 更新锁定状态
+                    if target:
+                        locked_target_center = (target.center_x, target.center_y)
+                        target_lost_count = 0
+                    else:
+                        target_lost_count += 1
+                        if target_lost_count >= TARGET_LOST_MAX and enemies:
+                            target = self._get_nearest_target(self_pos, enemies)
+                            if target:
+                                locked_target_center = (target.center_x, target.center_y)
+                                self.distance_calc.reset_state()
+                                target_lost_count = 0
+
+                    if target:
+                        self.movement_ctrl.move_towards(
+                            target.center_x, target.center_y,
+                            self_pos.center_x, self_pos.center_y
+                        )
+                        prev_move_duration = self.movement_ctrl.move_duration
+
+                elif last_enemy_seen_time and time.time() - last_enemy_seen_time < ENEMY_MEMORY_TIMEOUT:
+                    # 敌人记忆防抖：2秒内曾看到敌人，视为短暂丢失
+                    # 保持当前状态，不停技能、不随机移动
+                    if verbose:
+                        elapsed = time.time() - last_enemy_seen_time
+                        self.logger.debug(f"敌人短暂丢失({elapsed:.1f}s < {ENEMY_MEMORY_TIMEOUT}s)，保持状态")
+
+                elif not enemies and not allies:
+                    # 无单位 → 随机搜索
+                    self._handle_no_units()
+                    # 搜索返回后重置锁定
+                    locked_target_center = None
+
+                elif not enemies and allies:
+                    # 仅有友方 → 跟随
+                    self._handle_allies_only(self_pos, allies)
+
                 # 短暂休眠
                 time.sleep(0.05)
-                
+
             except Exception as e:
                 self.logger.error(f"战斗执行循环异常: {e}")
                 time.sleep(0.1)
-        
+
         self.logger.info("战斗执行循环结束")
+
+    def _find_locked_target(self, self_pos, enemies, locked_center, lost_count,
+                            lock_threshold, lost_max):
+        """
+        在敌人列表中查找已锁定的目标
+
+        Args:
+            self_pos: 自身位置
+            enemies: 当前帧敌人列表
+            locked_center: 上帧锁定目标中心 (x, y) 或 None
+            lost_count: 当前丢失计数
+            lock_threshold: 锁定匹配阈值（曼哈顿距离）
+            lost_max: 最大允许丢失帧数
+
+        Returns:
+            DetectionResult 或 None
+        """
+        if not enemies or self_pos is None:
+            return None
+
+        if locked_center is None:
+            # 首次锁定：选最近的
+            return self._get_nearest_target(self_pos, enemies)
+
+        # 尝试匹配已锁定目标
+        best_match = min(
+            enemies,
+            key=lambda e: abs(e.center_x - locked_center[0])
+                        + abs(e.center_y - locked_center[1])
+        )
+        match_dist = (abs(best_match.center_x - locked_center[0])
+                    + abs(best_match.center_y - locked_center[1]))
+
+        if match_dist < lock_threshold:
+            return best_match
+
+        # 匹配失败
+        return None
     
     def _is_combat_active(self):
         """
@@ -935,7 +1077,8 @@ class AutoCombatTask(BaseJumpTriggerTask):
                 )
 
                 if precise_duration is not None:
-                    move_time = max(0.05, min(precise_duration, original_duration))
+                    max_duration = max(original_duration * 2, 2.0)  # 允许超过用户设置，但不超过2倍或2秒
+                    move_time = max(0.05, min(precise_duration, max_duration))
                     self.movement_ctrl.move_duration = move_time
                 # 没有速度数据时保持默认 move_duration
 
@@ -1212,7 +1355,8 @@ class AutoCombatTask(BaseJumpTriggerTask):
             precise_duration = self.movement_ctrl.calculate_approach_duration(distance)
 
             if precise_duration is not None:
-                move_time = max(0.05, min(precise_duration, original_duration))
+                max_duration = max(original_duration * 2, 2.0)
+                move_time = max(0.05, min(precise_duration, max_duration))
                 self.movement_ctrl.move_duration = move_time
             elif distance < 450:  # 速度数据不足但距离近，短移动保底
                 self.movement_ctrl.move_duration = 0.15
@@ -1375,31 +1519,33 @@ class AutoCombatTask(BaseJumpTriggerTask):
     def _handle_stuck_or_jitter(self, self_pos):
         """
         处理卡住或抖动情况
-        
+
         Args:
             self_pos: 当前自身位置
-            
+
         Returns:
             bool: 如果执行了摆脱操作返回 True
         """
         # 记录当前位置
         self._record_position(self_pos.center_x, self_pos.center_y)
-        
-        # 卡住检测
-        is_stuck = self._detect_stuck()
-        if is_stuck:
-            self.logger.info("【卡住检测】角色可能被卡住，向下移动1秒")
-            self.movement_ctrl._press_movement_keys_for_duration(['S'], 1.0)
-            self._position_history.clear()
-            return True
-        
-        # 抖动检测
-        is_jitter = self._detect_jitter()
-        if is_jitter:
-            self._perform_random_move()
-            self._position_history.clear()
-            return True
-        
+
+        # 卡住检测（可通过配置关闭）
+        if self.config.get('卡住检测', True):
+            is_stuck = self._detect_stuck()
+            if is_stuck:
+                self.logger.info("【卡住检测】角色可能被卡住，向下移动1秒")
+                self.movement_ctrl._press_movement_keys_for_duration(['S'], 1.0)
+                self._position_history.clear()
+                return True
+
+        # 抖动检测（可通过配置关闭）
+        if self.config.get('抖动检测', True):
+            is_jitter = self._detect_jitter()
+            if is_jitter:
+                self._perform_random_move()
+                self._position_history.clear()
+                return True
+
         return False
     
     

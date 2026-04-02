@@ -9,7 +9,7 @@
     "企业微信Webhook": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=73728a93-47f0-432d-ac1d-21ff4ab40a5e",
     "任务触发延迟(秒)": 30,
     "连续失败阈值": 10,
-    "启用定时执行": true,
+    "启用定时执行": false,
     "定时执行时间(时)": 1,
     "定时执行时间(分)": 5,
     "定时执行日期": "每天",

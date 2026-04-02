@@ -381,15 +381,58 @@ class StateDetector:
     
     def detect_all_units(self):
         """
-        检测所有战场单位
-        
+        检测所有战场单位（3 次 YOLO 推理，已废弃，请用 detect_all_once）
+
         Returns:
             tuple: (self_pos, allies, enemies)
         """
-        self_pos = self.detect_self_once()
-        allies = self.detect_allies()
-        enemies = self.detect_enemies()
-        return self_pos, allies, enemies
+        return self.detect_all_once()
+
+    def detect_all_once(self, frame=None):
+        """
+        单次全量检测：1 帧 + 1 次 YOLO 推理
+
+        使用 label=-1 让 YOLO 返回所有检测结果，然后按 class_id 分类。
+        相比 detect_self_once() + detect_allies() + detect_enemies() 的 3 次推理，
+        此方法只需 1 次推理，开销降低约 66%。
+
+        Args:
+            frame: BGR 图像。如果为 None，使用 self.task.frame。
+
+        Returns:
+            tuple: (self_pos, allies, enemies, has_death)
+                self_pos: DetectionResult 或 None（最高置信度的 SELF）
+                allies: list[DetectionResult]
+                enemies: list[DetectionResult]
+                has_death: bool（是否检测到 DEATH 标签）
+        """
+        if frame is None:
+            frame = self._get_frame()
+        if frame is None:
+            return None, [], [], False
+
+        all_detections = og.my_app.yolo_detect(
+            frame, threshold=0.5, label=-1
+        )
+
+        self_pos = None
+        allies = []
+        enemies = []
+        has_death = False
+
+        for det in all_detections:
+            if det.class_id == CombatLabel.SELF:
+                if self_pos is None or det.confidence > self_pos.confidence:
+                    self_pos = det
+            elif det.class_id == CombatLabel.ALLY:
+                allies.append(det)
+            elif det.class_id == CombatLabel.ENEMY:
+                enemies.append(det)
+            elif det.class_id == CombatLabel.DEATH:
+                has_death = True
+            # TARGET_CIRCLE(4) 不归入任何列表
+
+        return self_pos, allies, enemies, has_death
     
     def get_battlefield_state(self):
         """
