@@ -55,7 +55,6 @@ class AutoMatchTask(BaseJumpTask):
         max_attempts = 10
         for _ in range(max_attempts):
             if self.in_lobby():
-                self.logger.info("已在大厅")
                 return True
             time.sleep(0.5)
         
@@ -72,7 +71,6 @@ class AutoMatchTask(BaseJumpTask):
         
         self.logger.info("未找到匹配按钮，使用相对坐标点击")
         self.click_relative(self.MATCH_START_REL[0], self.MATCH_START_REL[1])
-        self.logger.info(f"点击开始匹配按钮 (相对坐标: {self.MATCH_START_REL})")
         return True
     
     def _wait_and_accept_match(self, timeout=None):

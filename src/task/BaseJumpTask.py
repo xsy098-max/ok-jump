@@ -222,7 +222,6 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
         try:
             result = self.find_one(feature_name, threshold=threshold)
             if result:
-                self.log_info(f"找到'{button_label}'按钮")
                 self.click(result)
                 self.sleep(after_sleep)
                 return True
@@ -247,7 +246,6 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
             return False
         boxes = self.find_boxes(texts, match=pattern)
         if boxes:
-            self.log_info(f"OCR找到'{button_label}'")
             self.click(boxes[0])
             self.sleep(after_sleep)
             return True
@@ -369,14 +367,10 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
             [traditional_text, simplified_text] if is_traditional
             else [simplified_text, traditional_text]
         )
-        self.log_info(f"[OCR模糊匹配] {'繁体' if is_traditional else '简体'}环境，"
-                      f"目标: '{target_text}', 简体: '{simplified_text}', 繁体: '{traditional_text}'")
-
         # 方法1: 完整匹配 - 查找包含完整目标文字的文本框（支持简繁双语）
         matched_boxes = self.find_boxes(ocr_results, match=target_text)
         if matched_boxes:
             box = matched_boxes[0]
-            self.log_info(f"[OCR模糊匹配] 完整匹配成功: '{box.name}'")
             if return_center:
                 return (box.x + box.width // 2, box.y + box.height // 2)
             return box
@@ -398,9 +392,6 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
                 center_x = total_x // len(char_boxes)
                 center_y = total_y // len(char_boxes)
 
-                self.log_info(f"[OCR模糊匹配] '{target_text}' 被分开识别为 {list(char_boxes.keys())}，"
-                              f"合并位置: ({center_x}, {center_y})")
-
                 if return_center:
                     return (center_x, center_y)
                 first_box = next(iter(char_boxes.values()))
@@ -414,13 +405,10 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
             for char in chars:
                 if char in char_boxes:
                     box = char_boxes[char]
-                    self.log_info(f"[OCR模糊匹配] 仅找到 '{char}' 字，"
-                                  f"位置: ({box.x + box.width // 2}, {box.y + box.height // 2})")
                     if return_center:
                         return (box.x + box.width // 2, box.y + box.height // 2)
                     return box
 
-        self.log_info(f"[OCR模糊匹配] 未找到 '{target_text}'")
         return None
 
     def find_text_fuzzy_with_retry(self, target_text, timeout=5.0, ocr_interval=0.1):

@@ -596,7 +596,6 @@ class JumpTaskMixin:
                 # 使用普通 input_text
                 if hasattr(interaction, 'input_text'):
                     interaction.input_text(text)
-                    self.logger.info(f"ADB input_text 成功")
                     return True
 
             except Exception as e:
@@ -644,7 +643,6 @@ class JumpTaskMixin:
         """
         try:
             # 方法1：Ctrl+A 全选 + 删除（优先）
-            self.logger.info("ADB清空: 尝试 Ctrl+A 全选...")
             self.send_key_down('ctrl')
             time.sleep(0.05)
             self.send_key('a')
@@ -654,11 +652,8 @@ class JumpTaskMixin:
             self.send_key('KEYCODE_DEL', after_sleep=0.1)
 
             # 方法2：多次删除键（备选，确保清空）
-            self.logger.info("ADB清空: 发送删除键确保清空...")
             for i in range(15):
                 self.send_key('KEYCODE_DEL', after_sleep=0.01)
-
-            self.logger.info("ADB清空完成")
 
         except Exception as e:
             self.logger.warning(f"ADB 清空输入框异常: {e}")

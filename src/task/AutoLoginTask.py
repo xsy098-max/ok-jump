@@ -195,11 +195,6 @@ class AutoLoginTask(BaseJumpTask):
         else:
             self.log_info("后台模式初始化: 未获取到窗口句柄，将在首次操作时重试")
         
-        # 记录后台模式状态
-        status = background_manager.get_background_status()
-        self.log_info(f"后台模式状态: 启用={status['background_mode_enabled']}, "
-                      f"伪最小化={status['is_pseudo_minimized']}, "
-                      f"在后台={status['is_in_background']}")
 
     def _log_window_state(self):
         """记录窗口状态（调试用）"""
@@ -349,10 +344,6 @@ class AutoLoginTask(BaseJumpTask):
         """获取 OCR 文本（带缓存）"""
         if self._cached_ocr is None:
             self._cached_ocr = self.ocr()
-            if self._cached_ocr:
-                self.log_info(f"OCR识别到 {len(self._cached_ocr)} 个文字:")
-                for box in self._cached_ocr:
-                    self.log_info(f"  - '{box.name}' at ({box.x}, {box.y})")
         return self._cached_ocr
 
     def _clear_ocr_cache(self):
@@ -586,29 +577,16 @@ class AutoLoginTask(BaseJumpTask):
                 self._record_failure()
                 break
 
-            # 检查窗口状态（调试日志）
-            self._log_window_state()
-
-            # 记录后台模式状态
-            bg_enabled = background_manager.is_background_mode()
-            bg_in_bg = background_manager.is_game_in_background()
-            self.log_info(f"后台模式: 启用={bg_enabled}, 在后台={bg_in_bg}")
-
             # 确保窗口可截图（仅在最小化时伪最小化）
             self.ensure_capturable()
 
             # 获取截图
-            self.log_info("开始截图...")
             self.next_frame()
 
             # 检查截图是否有效
             if self.frame is None:
-                self.log_info("截图失败: frame 为 None")
                 time.sleep(0.5)
                 continue
-
-            frame_h, frame_w = self.frame.shape[:2] if self.frame is not None else (0, 0)
-            self.log_info(f"截图成功: {frame_w}x{frame_h}")
 
             # 清空OCR缓存，准备新的检测
             self._clear_ocr_cache()
@@ -637,7 +615,6 @@ class AutoLoginTask(BaseJumpTask):
                 time.sleep(1.0)  # 增加等待时间，确保界面完全渲染
                 self.next_frame()  # 重新截图
                 self._clear_ocr_cache()  # 清空OCR缓存
-                self.log_info("界面稳定后重新截图完成，继续登录流程")
 
             # 检查登录成功
             if self._check_login_success():
@@ -1031,26 +1008,21 @@ class AutoLoginTask(BaseJumpTask):
         detection_result = self._detect_checkbox_with_confirmation()
 
         if detection_result['state'] == 'checked':
-            self.log_info("协议勾选框已勾选（YOLO检测确认），跳过点击")
             return True
         elif detection_result['state'] == 'unchecked':
-            self.log_info("协议勾选框未勾选（YOLO检测确认），尝试点击勾选...")
             if detection_result['box']:
                 box = detection_result['box']
                 # 计算勾选框中心点的相对坐标
                 click_x = (box.x + box.width / 2) / self.width
                 click_y = (box.y + box.height / 2) / self.height
-                self.log_info(f"YOLO定位勾选框: 点击位置: ({click_x:.3f}, {click_y:.3f})")
                 self.click_relative(click_x, click_y, after_sleep=0.3)
                 self.sleep(0.3)
             return True
 
         # 方法2：如果 YOLO 检测不确定，使用 OCR 定位
-        self.log_info("YOLO检测置信度不足，尝试通过OCR定位...")
         checkbox_label = self._find_checkbox_label_by_ocr()
         if checkbox_label:
             click_x, click_y = self._calculate_checkbox_click_position(checkbox_label)
-            self.log_info(f"OCR定位勾选框: 点击位置: ({click_x:.3f}, {click_y:.3f})")
             self.click_relative(click_x, click_y, after_sleep=0.3)
             self.sleep(0.3)
 
@@ -1070,7 +1042,6 @@ class AutoLoginTask(BaseJumpTask):
         """
         # 检查 YOLO 检测器是否可用
         if self._checkbox_detector is None:
-            self.log_info("YOLO勾选框检测器未初始化，尝试初始化...")
             self._init_checkbox_detector()
             if self._checkbox_detector is None:
                 self.log_error("YOLO勾选框检测器初始化失败，使用OCR备选方案")
@@ -1100,21 +1071,17 @@ class AutoLoginTask(BaseJumpTask):
                         # 创建兼容的 Box 对象
                         box = self._create_box_from_detection(det)
                         checked_boxes.append((box, det.confidence))
-                        self.log_info(f"YOLO检测[{i+1}] 已勾选框，置信度: {det.confidence:.3f}")
                     elif det.class_id == self.CHECKBOX_LABEL_UNCHECKED:
                         # 未勾选
                         unchecked_count += 1
                         box = self._create_box_from_detection(det)
                         unchecked_boxes.append((box, det.confidence))
-                        self.log_info(f"YOLO检测[{i+1}] 未勾选框，置信度: {det.confidence:.3f}")
             except Exception as e:
                 self.log_error(f"YOLO检测异常: {e}")
 
             time.sleep(0.05)
 
         # 根据多数结果判断
-        self.log_info(f"YOLO多次检测统计: 已勾选={checked_count}次, 未勾选={unchecked_count}次")
-
         if checked_count > unchecked_count:
             # 已勾选占多数
             best_box = max(checked_boxes, key=lambda x: x[1])[0] if checked_boxes else None
@@ -1182,39 +1149,11 @@ class AutoLoginTask(BaseJumpTask):
         if boxes:
             box = boxes[0]
             self.log_info(f"找到'{button_name}'按钮(OCR)")
-            self.log_info(f"  原始位置: x={box.x}, y={box.y}, width={box.width}, height={box.height}")
-            self.log_info(f"  屏幕尺寸: width={self.width}, height={self.height}")
 
             click_x = (box.x + box.width / 2) / self.width
             click_y = (box.y + box.height / 2) / self.height
-            self.log_info(f"  相对位置: ({click_x:.4f}, {click_y:.4f})")
 
-            abs_x = int(box.x + box.width / 2)
-            abs_y = int(box.y + box.height / 2)
-            self.log_info(f"  绝对位置: ({abs_x}, {abs_y})")
-
-            try:
-                interaction = self.executor.interaction
-                self.log_info(f"  interaction 类型: {type(interaction).__name__}")
-                self.log_info(f"  interaction.hwnd: {interaction.hwnd if hasattr(interaction, 'hwnd') else 'N/A'}")
-
-                if hasattr(interaction, 'hwnd_window'):
-                    hwnd_window = interaction.hwnd_window
-                    self.log_info(f"  hwnd_window.visible: {hwnd_window.visible if hwnd_window else 'N/A'}")
-                    self.log_info(f"  hwnd_window.exists: {hwnd_window.exists if hwnd_window else 'N/A'}")
-                    if hwnd_window:
-                        self.log_info(f"  hwnd_window.x: {hwnd_window.x}, hwnd_window.y: {hwnd_window.y}")
-                        self.log_info(f"  hwnd_window.width: {hwnd_window.width}, hwnd_window.height: {hwnd_window.height}")
-
-                        if not hwnd_window.visible:
-                            self.log_info("  窗口不可见，尝试恢复窗口...")
-                            self._ensure_window_visible(hwnd_window)
-            except Exception as e:
-                self.log_error(f"  获取 interaction 信息失败: {e}")
-
-            self.log_info(f"  调用 click_relative...")
             result = self.click_relative(click_x, click_y, after_sleep=1)
-            self.log_info(f"  click_relative 返回值: {result}")
             return True
 
         return False
@@ -1227,7 +1166,6 @@ class AutoLoginTask(BaseJumpTask):
         """
         # 后台模式下不恢复窗口
         if background_manager.is_background_mode():
-            self.log_info("  后台模式：跳过窗口恢复操作")
             return True
         
         try:
@@ -1241,11 +1179,9 @@ class AutoLoginTask(BaseJumpTask):
             is_minimized = hwnd_window.is_minimized() if hasattr(hwnd_window, 'is_minimized') else False
 
             if is_minimized or not hwnd_window.visible:
-                self.log_info(f"  恢复窗口: hwnd={hwnd}, minimized={is_minimized}, visible={hwnd_window.visible}")
                 win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
                 time.sleep(0.5)
 
-                self.log_info(f"  窗口已恢复: visible={win32gui.IsWindowVisible(hwnd)}")
                 return True
         except Exception as e:
             self.log_error(f"  恢复窗口失败: {e}")
@@ -1472,10 +1408,8 @@ class AutoLoginTask(BaseJumpTask):
                 self.log_info(f"开始输入账号(第{attempt}次): {account[:3]}***")
 
                 if self._is_adb_interaction():
-                    self.log_info("ADB模式: 使用 input_text_with_clear...")
                     success = self.input_text_with_clear(str(account), clear_first=True)
                 else:
-                    self.log_info("PC模式: 先清空后输入...")
                     # PC 模式也使用 input_text_with_clear
                     success = self.input_text_with_clear(str(account), clear_first=True)
 
@@ -1508,13 +1442,11 @@ class AutoLoginTask(BaseJumpTask):
             bool: True 如果清空成功
         """
         try:
-            self.log_info("执行全选操作...")
             self.send_key_down('ctrl')
             self.send_key('a')
             self.send_key_up('ctrl')
             self.sleep(0.2)
 
-            self.log_info("执行清除操作...")
             self.send_key('backspace')
             self.sleep(0.3)
             return True
@@ -1536,30 +1468,24 @@ class AutoLoginTask(BaseJumpTask):
         """
         # 方法1：使用 uiautomator2 直接设置空文本（最可靠）
         try:
-            self.log_info("ADB清空方法1: 使用 uiautomator2 清空...")
             if self._clear_with_u2():
-                self.log_info("uiautomator2 清空成功")
                 return True
         except Exception as e:
-            self.log_info(f"uiautomator2 清空失败: {e}")
+            pass
 
         # 方法2：多次发送删除键（简单可靠）
         try:
-            self.log_info("ADB清空方法2: 多次删除键清空...")
             self._clear_with_multiple_backspace()
-            self.log_info("多次删除键清空完成")
             return True
         except Exception as e:
-            self.log_info(f"多次删除键清空失败: {e}")
+            pass
 
         # 方法3：双击选中 + 删除
         try:
-            self.log_info("ADB清空方法3: 双击选中+删除...")
             self._clear_with_double_click()
-            self.log_info("双击选中+删除完成")
             return True
         except Exception as e:
-            self.log_info(f"双击选中+删除失败: {e}")
+            pass
 
         return False
 
@@ -1581,10 +1507,8 @@ class AutoLoginTask(BaseJumpTask):
                 # 然后使用 u2 清空文本
                 # 注意：需要先点击输入框获取焦点
                 u2.clear_text()
-                self.log_info("u2.clear_text() 执行成功")
                 return True
             else:
-                self.log_info("uiautomator2 不可用")
                 return False
         except Exception as e:
             self.log_error(f"uiautomator2 清空异常: {e}")
@@ -1604,9 +1528,6 @@ class AutoLoginTask(BaseJumpTask):
             # 使用框架的 send_key 方法
             for i in range(count):
                 self.send_key('KEYCODE_DEL', after_sleep=0.01)
-                # 每10次输出一次进度
-                if (i + 1) % 10 == 0:
-                    self.log_info(f"已发送 {i + 1} 次删除键")
         except Exception as e:
             self.log_error(f"多次删除键异常: {e}")
 
@@ -1630,8 +1551,6 @@ class AutoLoginTask(BaseJumpTask):
             else:
                 # 使用默认位置（屏幕中上部）
                 click_x, click_y = 0.5, 0.35
-
-            self.log_info(f"双击位置: ({click_x:.3f}, {click_y:.3f})")
 
             # 双击选中
             self.click_relative(click_x, click_y)
@@ -1697,13 +1616,11 @@ class AutoLoginTask(BaseJumpTask):
             except Exception:
                 self.sleep(0.05)
 
-        self.log_info("OCR验证未找到匹配账号，跳过校验继续执行")
         return True
 
     def _locate_account_input_box(self, timeout):
         """定位账号输入框（模板匹配）"""
         template_path = self._resolve_account_input_template_path()
-        self.log_info(f"账号输入框模板路径: {template_path}")
         template = cv2.imread(template_path)
         if template is None:
             raise AutoLoginInputException(f"无法加载输入框模板: {template_path}")
@@ -1757,7 +1674,6 @@ class AutoLoginTask(BaseJumpTask):
             for labels in alt_labels:
                 if labels:
                     account_label = labels
-                    self.log_info(f"找到备用标签: {labels[0].name}")
                     break
         
         if not account_label:
@@ -1765,14 +1681,11 @@ class AutoLoginTask(BaseJumpTask):
             return None
 
         label = account_label[0]
-        self.log_info(f"找到账户名标签: {label.name} at ({label.x}, {label.y})")
 
         input_box_y = label.y + label.height + int(self.height * 0.02)
         input_box_x = label.x
         input_box_width = int(self.width * 0.25)
         input_box_height = int(self.height * 0.035)
-
-        self.log_info(f"通过OCR定位输入框: x={input_box_x}, y={input_box_y}, width={input_box_width}, height={input_box_height}")
 
         return {
             'x': input_box_x,

@@ -281,13 +281,6 @@ class AutoCombatTask(BaseJumpTriggerTask):
         
         if verbose:
             self.logger.info("详细日志已启用")
-            
-            # 输出当前技能配置
-            skill_status = self.skill_ctrl.get_skill_status()
-            self.logger.info("当前技能配置:")
-            for skill_name, status in skill_status.items():
-                self.logger.info(f"  {skill_name}: 启用={status['启用']}, "
-                               f"按键={status['按键']}, 间隔={status['间隔']}秒")
     
     def _verbose_log(self, message):
         """输出详细日志（仅在详细日志开启时）"""
@@ -391,10 +384,6 @@ class AutoCombatTask(BaseJumpTriggerTask):
             background_manager.check_and_auto_pseudo_minimize()
             
             try:
-                # 每10次循环输出一次状态摘要
-                if verbose and self._loop_count % 10 == 0:
-                    self.logger.info(f"循环计数: {self._loop_count}, 当前状态: {self._last_state}")
-                
                 # ======== 第一步：死亡状态检测（并行线程，快速查询）========
                 if self.state_detector.is_death_detected():
                     self.logger.warning("检测到死亡状态，等待复活...")
@@ -405,9 +394,6 @@ class AutoCombatTask(BaseJumpTriggerTask):
                     continue
                 
                 # ======== 第二步：自身检测（15秒超时）========
-                if verbose:
-                    self.logger.info(f"步骤2: 自身位置检测开始...")
-                    
                 self_pos = self.state_detector.detect_self(timeout=15)
                 
                 if self_pos is None:
@@ -420,26 +406,14 @@ class AutoCombatTask(BaseJumpTriggerTask):
                         self._cleanup()
                         return
                     
-                    
+
                     # 不是战斗结束，记录错误并退出
-                    self._log_frame_info("自身检测失败")
                     raise Exception("自身检测超时 - 15秒内未找到自己")
-                
-                if verbose:
-                    self.logger.info(f"步骤2完成: 自身位置=({self_pos.center_x}, {self_pos.center_y}), "
-                                    f"置信度={self_pos.confidence:.2f}, "
-                                    f"框=({self_pos.x}, {self_pos.y}, {self_pos.width}x{self_pos.height})")
-                
+
                 # ======== 第三步：战场状态判断 ========
-                if verbose:
-                    self.logger.info(f"步骤3: 战场状态检测...")
-                
                 state, allies, enemies = self.state_detector.get_battlefield_state_detailed()
                 self._last_state = state.value
-                
-                if verbose:
-                    self._log_battlefield_details(state, self_pos, allies, enemies)
-                
+
                 # ======== 第四步：更新距离给技能控制器 ========
                 # 检测所有敌人，只要有一个在范围内就启动技能
                 if enemies:
@@ -451,7 +425,6 @@ class AutoCombatTask(BaseJumpTriggerTask):
                 
             except Exception as e:
                 self.logger.error(f"自动战斗异常: {e}")
-                self._log_frame_info("异常发生时")
                 self._cleanup()
                 raise
     
@@ -504,12 +477,7 @@ class AutoCombatTask(BaseJumpTriggerTask):
                         self.logger.info("检测到退出战斗场景，停止自动战斗...")
                         self.logger.info("=" * 40)
                         self._stop_combat_thread()
-                
-                # 状态日志输出
-                if verbose and self._loop_count % 20 == 0:
-                    self.logger.info(f"状态感知循环: 战斗状态={'战斗中' if in_combat else '非战斗'}, "
-                                   f"战斗线程={'运行中' if self._combat_active else '已停止'}")
-                
+
                 self._loop_count += 1
                 
                 # 检测间隔
@@ -798,36 +766,6 @@ class AutoCombatTask(BaseJumpTriggerTask):
         """
         with self._combat_lock:
             return self._combat_active
-    
-    def _log_frame_info(self, context=""):
-        """记录当前帧信息"""
-        frame = self.frame
-        if frame is not None:
-            h, w = frame.shape[:2]
-            self.logger.info(f"📷 帧信息[{context}]: 尺寸={w}x{h}")
-        else:
-            self.logger.warning(f"📷 帧信息[{context}]: 无法获取帧（frame=None）")
-    
-    def _log_battlefield_details(self, state, self_pos, allies, enemies):
-        """记录战场详细信息"""
-        self.logger.info(f"战场状态: {state.value}")
-        self.logger.info(f"   自己: ({self_pos.center_x}, {self_pos.center_y})")
-        
-        if allies:
-            for i, ally in enumerate(allies):
-                dist = self.distance_calc.calculate(self_pos, ally)
-                self.logger.info(f"   友方{i+1}: ({ally.center_x}, {ally.center_y}), "
-                               f"置信度={ally.confidence:.2f}, 距离={dist:.0f}px")
-        else:
-            self.logger.info(f"   友方: 无")
-        
-        if enemies:
-            for i, enemy in enumerate(enemies):
-                dist = self.distance_calc.calculate(self_pos, enemy)
-                self.logger.info(f"   敌军{i+1}: ({enemy.center_x}, {enemy.center_y}), "
-                               f"置信度={enemy.confidence:.2f}, 距离={dist:.0f}px")
-        else:
-            self.logger.info(f"   敌军: 无")
     
     def _handle_battlefield_state(self, state, self_pos, allies, enemies):
         """
@@ -1348,8 +1286,6 @@ class AutoCombatTask(BaseJumpTriggerTask):
         direction = self.distance_calc.get_movement_direction(self_pos, target, distance)
 
         if direction == "towards":
-            self.logger.info(f"➡️ 距离{distance:.0f}px > 225px，靠近目标")
-
             # 精准移动时间：基于实际移动速度计算到达技能范围边界所需时间
             original_duration = self.movement_ctrl.move_duration
             precise_duration = self.movement_ctrl.calculate_approach_duration(distance)
@@ -1385,13 +1321,11 @@ class AutoCombatTask(BaseJumpTriggerTask):
 
             self.movement_ctrl.move_duration = original_duration
         elif direction == "away":
-            self.logger.info(f"⬅️ 距离{distance:.0f}px < 0px，远离目标")
             self.movement_ctrl.move_away(
                 target.center_x, target.center_y,
                 self_pos.center_x, self_pos.center_y
             )
         else:
-            self.logger.info(f"⏹️ 距离{distance:.0f}px 在最佳范围内，停止移动")
             self.movement_ctrl.stop()
     
     def _record_position(self, x: float, y: float):

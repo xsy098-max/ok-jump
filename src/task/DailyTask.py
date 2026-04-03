@@ -91,7 +91,6 @@ class DailyTask(BaseJumpTask):
             claim_button = self.find_feature('claim_reward')
             if claim_button:
                 self.click(claim_button[0], claim_button[1])
-                self.logger.info("领取奖励")
                 rewards_collected += 1
                 
                 import time
@@ -106,7 +105,6 @@ class DailyTask(BaseJumpTask):
         self.logger.info("使用体力...")
         
         threshold = self.default_config.get('体力阈值', 50)
-        self.logger.info(f"体力阈值: {threshold}")
         
         stamina_button = self.find_feature('use_stamina')
         if stamina_button:

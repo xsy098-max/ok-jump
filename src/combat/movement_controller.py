@@ -178,7 +178,6 @@ class MovementController:
             if frame is not None:
                 self_x = frame.shape[1] // 2
                 self_y = frame.shape[0] // 2
-                self.task.logger.info(f"[移动] 使用屏幕中心作为自身位置: ({self_x}, {self_y})")
             else:
                 self.task.logger.warning("[移动] 无法获取帧，跳过移动")
                 return
@@ -190,18 +189,10 @@ class MovementController:
         # 根据方向按键
         keys = self._calculate_keys(dx, dy)
         if keys:
-            self.task.logger.info(f"[移动] 向目标移动: 自身({self_x}, {self_y}) -> 目标({target_x}, {target_y}), 偏移=({dx}, {dy}), 按键={'+'.join(keys)}")
             if should_stop_callback:
-                interrupted = self.move_with_interrupt_check(keys, should_stop_callback)
-                if interrupted:
-                    self.task.logger.info(f"[移动] 被中断，已停止移动")
-                else:
-                    self.task.logger.info(f"[移动] 移动执行完成: 按键 {'+'.join(keys)} 持续 {self.move_duration}秒")
+                self.move_with_interrupt_check(keys, should_stop_callback)
             else:
                 self._press_movement_keys(keys)
-                self.task.logger.info(f"[移动] 移动执行完成: 按键 {'+'.join(keys)} 持续 {self.move_duration}秒")
-        else:
-            self.task.logger.info(f"[移动] 偏移太小，不移动: dx={dx}, dy={dy}")
     
     def _move_pc_away(self, target_x, target_y, self_x=None, self_y=None):
         """PC端远离目标"""
@@ -211,45 +202,36 @@ class MovementController:
             if frame is not None:
                 self_x = frame.shape[1] // 2
                 self_y = frame.shape[0] // 2
-                self.task.logger.info(f"[移动] 使用屏幕中心作为自身位置: ({self_x}, {self_y})")
             else:
                 self.task.logger.warning("[移动] 无法获取帧，跳过移动")
                 return
-        
+
         # 计算相反方向
         dx = self_x - target_x
         dy = self_y - target_y
-        
-        self.task.logger.info(f"[移动] 远离目标: 自身({self_x}, {self_y}) <- 目标({target_x}, {target_y}), 偏移=({dx}, {dy})")
-        
+
         keys = self._calculate_keys(dx, dy)
         if keys:
             self._press_movement_keys(keys)
-        else:
-            self.task.logger.info("[移动] 偏移太小，不移动")
     
     def _move_pc_left_right(self, duration=1):
         """PC端左右来回移动"""
-        self.task.logger.info(f"[移动] 左右移动: 向左 {duration}秒")
         self.task.send_key_down(self.KEY_LEFT)
         time.sleep(duration)
         self.task.send_key_up(self.KEY_LEFT)
-        
-        self.task.logger.info(f"[移动] 左右移动: 向右 {duration}秒")
+
         self.task.send_key_down(self.KEY_RIGHT)
         time.sleep(duration)
         self.task.send_key_up(self.KEY_RIGHT)
     
     def _move_pc_up(self, duration=1):
         """PC端向上移动"""
-        self.task.logger.info(f"[移动] 向上移动 {duration}秒")
         self.task.send_key_down(self.KEY_UP)
         time.sleep(duration)
         self.task.send_key_up(self.KEY_UP)
     
     def _stop_pc(self):
         """PC端停止移动"""
-        self.task.logger.info("[移动] 停止移动，释放所有按键")
         hwnd = self._get_game_hwnd()
         
         # 释放所有移动键
@@ -291,11 +273,7 @@ class MovementController:
         if abs(dx) < THRESHOLD and abs(dy) < THRESHOLD:
             self.task.logger.debug(f"[移动] 偏移太小，不移动: dx={dx}, dy={dy}")
             return keys
-        
-        # 计算角度（用于日志）
-        angle = math.atan2(dy, dx)
-        angle_deg = math.degrees(angle)
-        
+
         # 根据偏移量直接判断方向（支持八方向）
         # 水平方向判断
         if abs(dx) >= THRESHOLD:
@@ -310,9 +288,7 @@ class MovementController:
                 keys.append(self.KEY_DOWN)   # 目标在下方，按 S
             else:
                 keys.append(self.KEY_UP)     # 目标在上方，按 W
-        
-        self.task.logger.info(f"[移动] 方向计算: dx={dx}, dy={dy}, 角度={angle_deg:.1f}°, 按键={'+'.join(keys) if keys else '无'}")
-        
+
         return keys
     
     def _press_movement_keys(self, keys):
@@ -332,7 +308,6 @@ class MovementController:
 
         # ADB 模式：使用虚拟摇杆
         if self.is_adb():
-            self.task.logger.info(f"[移动] ADB模式移动: {'+'.join(keys)}, 持续{self.move_duration}秒")
             self._press_movement_keys_adb(keys, self.move_duration)
             return
 
@@ -340,25 +315,18 @@ class MovementController:
         if self._current_direction is not None and self._current_direction != keys:
             self._stop_pc()
 
-        key_str = '+'.join(keys)
-        self.task.logger.info(f"[移动] PC模式移动: 按键 {key_str}, 持续 {self.move_duration}秒")
-
         try:
             # 使用任务类的 send_key_down/up 方法（智能适配后台模式）
             for key in keys:
-                self.task.logger.info(f"[移动] 按下按键: {key}")
                 self.task.send_key_down(key)
 
-            self.task.logger.info(f"[移动] 等待 {self.move_duration}秒...")
             time.sleep(self.move_duration)
 
             for key in keys:
-                self.task.logger.info(f"[移动] 释放按键: {key}")
                 self.task.send_key_up(key)
 
             self._current_direction = keys
             self._is_moving = True
-            self.task.logger.info(f"[移动] 移动完成: 按键 {key_str}")
 
         except Exception as e:
             self.task.logger.error(f"[移动] 按键异常: {e}")
@@ -498,9 +466,6 @@ class MovementController:
         end_x = int(cx + dx)
         end_y = int(cy + dy)
 
-        key_str = '+'.join(keys)
-        self.task.logger.info(f"[ADB移动] 方向: {key_str}, 持续 {duration}秒, 摇杆: ({cx},{cy}) -> ({end_x},{end_y})")
-
         # 【关键修复】模拟朝敌人移动的方式：
         # 在循环中持续发送短时间 swipe，形成连续移动
         # 这与 move_towards 的工作方式一致
@@ -515,7 +480,6 @@ class MovementController:
                 # 短暂间隔（模拟主循环间隔）
                 time.sleep(0.05)
             
-            self.task.logger.info(f"[ADB移动] 完成: {key_str} 方向移动 {duration}秒")
         except Exception as e:
             self.task.logger.error(f"[ADB移动] 异常: {e}")
 
@@ -615,10 +579,6 @@ class MovementController:
         # 执行滑动
         end_x = int(cx + joystick_dx)
         end_y = int(cy + joystick_dy)
-
-        # 计算角度用于日志
-        angle = math.degrees(math.atan2(dy_normalized, dx_normalized))
-        self.task.logger.info(f"[ADB移动] 摇杆中心:({cx},{cy}), 半径:{radius}, 目标:({target_x},{target_y}), 自身:({self_x:.0f},{self_y:.0f}), 方向角:{angle:.0f}°, 映射:({end_x},{end_y}), 全速移动")
 
         if should_stop_callback:
             # 可中断模式：分段发送短 swipe，每段之间检查回调
