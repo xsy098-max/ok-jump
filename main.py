@@ -165,6 +165,28 @@ def patch_start_controller():
                 # 对于自管理任务，先启动模拟器并连接 ADB
                 # 这样 TaskExecutor 才能获取截图
                 _pre_start_emulator_for_task(task)
+
+            # 【关键修复】启动新 onetime task 前，停止 executor 当前正在运行的任务
+            #
+            # 问题：Trigger task（如 AutoCombatTask）的 run() 是阻塞式无限循环，
+            # executor 线程被其占据后无法处理新 enabled 的 onetime task。
+            # og.executor.start() 发现线程已在运行就不再重新启动，导致新任务永远不会被执行。
+            #
+            # 修复：调用 stop_current_task() 中断当前 trigger task 的 run()，
+            # 让 executor 线程回到主循环，从而能够拾取新的 onetime task。
+            # trigger task 仍然保持 enabled 状态，executor 会在 onetime task 完成后重新运行它。
+            from ok import og
+            if hasattr(og, 'executor') and og.executor:
+                executor = og.executor
+                current = getattr(executor, 'current_task', None)
+                if current is not None and current is not task:
+                    logger.info(f'Executor 正在运行 {current.name}，停止以启动 {task.name}')
+                    try:
+                        executor.stop_current_task()
+                        logger.info(f'已停止 {current.name}，executor 将处理 {task.name}')
+                    except Exception as e:
+                        logger.warning(f'停止当前任务失败: {e}')
+
         if original_start:
             return original_start(self, task, exit_after)
 
