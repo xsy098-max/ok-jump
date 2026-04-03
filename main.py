@@ -95,28 +95,27 @@ def export_logs():
 def patch_task_buttons_stop():
     """
     Patch TaskButtons.stop_clicked to properly stop tasks
-    
-    问题: ok-script框架中TaskButtons.stop_clicked会调用task.unpause()
-    而unpause()会调用executor.start()恢复执行器运行，可能导致任务意外重新启动
-    
-    修复: 停止任务时只禁用任务，不调用unpause()恢复执行器
+
+    原始 stop_clicked 调用 disable() + unpause()。
+    unpause() 内部会调用 executor.start() 恢复执行器运行，
+    确保 executor 的 current_task 被正确清除，
+    避免后续启动新任务时因 executor 内部状态不一致而无法启动。
+
+    此 patch 保留原始行为（调用 unpause），确保任务切换正常工作。
     """
     from ok.gui.tasks.TaskCard import TaskButtons
     logger = Logger.get_logger(__name__)
-    
+
     def patched_stop_clicked(self):
         logger.info(f'停止任务: {self.task.name}')
         # 禁用任务
         self.task.disable()
-        # 设置_paused为False（不调用executor.start()）
-        # 这样任务状态会被正确重置，但不会触发执行器恢复运行
-        self.task._paused = False
-        # 发送信号更新UI
-        from ok.gui.Communicate import communicate
-        communicate.task.emit(self.task)
-    
+        # 调用 unpause() 恢复执行器，确保 executor 内部状态被正确清理
+        # 这样后续启动新任务时 executor 才能正确识别并执行
+        self.task.unpause()
+
     TaskButtons.stop_clicked = patched_stop_clicked
-    logger.info('TaskButtons.stop_clicked patched: proper task stopping')
+    logger.info('TaskButtons.stop_clicked patched: proper task stopping with unpause')
 
 
 def patch_start_controller():
