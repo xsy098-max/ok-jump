@@ -913,7 +913,7 @@ class Phase1Handler:
     
     def _detect_stuck(self) -> bool:
         """
-        检测角色是否被卡住（连续4次检测到相同坐标）
+        检测角色是否被卡住（连续8次检测到相同坐标）
         
         检测逻辑：
         - 如果最近4个位置都在10像素范围内，认为角色被卡住
@@ -923,7 +923,7 @@ class Phase1Handler:
             bool: 如果检测到卡住返回 True
         """
         STUCK_THRESHOLD = 10  # 10像素内视为同一位置
-        STUCK_COUNT = 4  # 连续4次
+        STUCK_COUNT = 8  # 连续8次
         
         if len(self._position_history) < STUCK_COUNT:
             return False
