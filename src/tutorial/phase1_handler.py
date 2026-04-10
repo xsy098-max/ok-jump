@@ -353,16 +353,16 @@ class Phase1Handler:
             # 获取角色配置，判断角色类型
             config = self.character_selector.get_current_config()
             if config and config.target_type == 'monkey':
-                # 悟空角色：检测到自身后等待10秒，然后向左上移动3秒
+                # 悟空角色：检测到自身后等待10秒，然后向左上移动8秒
                 self._log("悟空角色：等待10秒后向左上移动...")
                 time.sleep(10.0)
-                self._log("悟空角色：开始向左上移动3秒...")
+                self._log("悟空角色：开始向左上移动8秒...")
                 # 使用MovementController确保后台模式兼容
                 # 使用KEY_UP和KEY_LEFT常量确保键名正确
                 self.movement_ctrl._press_movement_keys_for_duration(
-                    [self.movement_ctrl.KEY_UP, self.movement_ctrl.KEY_LEFT], 3.0
+                    [self.movement_ctrl.KEY_UP, self.movement_ctrl.KEY_LEFT], 8.0
                 )
-                self._log("悟空角色：左上移动3秒完成，进入普攻按钮检测")
+                self._log("悟空角色：左上移动8秒完成，进入普攻按钮检测")
                 self.state_machine.transition_to(TutorialState.NORMAL_ATTACK_DETECTION)
             else:
                 # 路飞/小鸣人：保持原有流程，进入目标检测
@@ -491,22 +491,31 @@ class Phase1Handler:
             self_pos_y = self_pos.center_y
             self._last_self_pos = (self_pos_x, self_pos_y)
         
-        # 计算距离
+        # 计算实际移动目标（含补偿偏移）
+        move_target_x = self._target.center_x
+        move_target_y = self._target.center_y
+
+        # 路飞在模拟器下自身检测偏右约30px，加补偿让角色真正走进目标圈
+        current_char = self.character_selector.get_current_character_name() if self.character_selector else ''
+        if current_char == '路飞':
+            move_target_x -= 35  # 补偿自身检测偏右，确保走进圈内
+
+        # 计算距离（基于原始目标位置）
         distance = self.distance_calc.calculate_from_coords(
             self_pos_x, self_pos_y,
             self._target.center_x, self._target.center_y
         )
-        
+
         # 减少距离日志输出频率（每2秒输出一次）
         if not hasattr(self, '_last_distance_log_time'):
             self._last_distance_log_time = 0
         if time.time() - self._last_distance_log_time > 2.0:
-            self._log(f"距离目标: {distance:.0f}px, 已移动: {elapsed_time:.1f}秒")
+            self._log(f"距离目标: {distance:.0f}px, 补偿偏移: ({move_target_x - self._target.center_x}, {move_target_y - self._target.center_y}), 已移动: {elapsed_time:.1f}秒")
             self._last_distance_log_time = time.time()
-        
-        # 移动靠近目标
+
+        # 移动靠近目标（使用补偿后的坐标）
         self.movement_ctrl.move_towards(
-            self._target.center_x, self._target.center_y,
+            move_target_x, move_target_y,
             self_pos_x, self_pos_y
         )
         
