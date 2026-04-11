@@ -46,14 +46,8 @@ class OnnxYoloDetect:
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
         
-        # 创建推理会话
-        providers = ['CPUExecutionProvider']
-        try:
-            # 尝试使用 GPU
-            providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
-        except:
-            pass
-        
+        # 创建推理会话，优先 CUDA，回退 CPU
+        providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
         self.session = ort.InferenceSession(weights, providers=providers)
         
         # 获取模型输入输出信息

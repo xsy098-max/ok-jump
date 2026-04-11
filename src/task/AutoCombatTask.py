@@ -711,7 +711,7 @@ class AutoCombatTask(BaseJumpTriggerTask):
                     self._handle_allies_only(self_pos, allies)
 
                 # 短暂休眠
-                time.sleep(0.05)
+                time.sleep(0.01)
 
             except Exception as e:
                 self.logger.error(f"战斗执行循环异常: {e}")
