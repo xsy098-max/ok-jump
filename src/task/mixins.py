@@ -458,7 +458,7 @@ class JumpTaskMixin:
         发送按键（智能适配 ADB/Windows 模式）
 
         Args:
-            key: 按键
+            key: 按键（字符串或 Android keycode 整数）
             down_time: 按下持续时间
             after_sleep: 按键后等待时间
 
@@ -466,7 +466,11 @@ class JumpTaskMixin:
             bool: 发送成功返回 True
         """
         if self._is_adb_interaction():
-            # ADB 模式：使用框架的 send_key（通过 ADB 命令）
+            if isinstance(key, int):
+                self.executor.interaction.send_key(key, down_time)
+                if after_sleep > 0:
+                    self.sleep(after_sleep)
+                return True
             return super().send_key(key, down_time=down_time, after_sleep=after_sleep)
         else:
             # Windows 模式：检查是否需要后台输入
@@ -631,7 +635,7 @@ class JumpTaskMixin:
         """
         try:
             for _ in range(count):
-                self.send_key('KEYCODE_DEL', after_sleep=0.01)
+                self.send_key(67, after_sleep=0.01)
         except Exception as e:
             self.logger.warning(f"ADB 清空输入框失败: {e}")
 
@@ -649,11 +653,11 @@ class JumpTaskMixin:
             time.sleep(0.05)
             self.send_key_up('ctrl')
             time.sleep(0.1)
-            self.send_key('KEYCODE_DEL', after_sleep=0.1)
+            self.send_key(67, after_sleep=0.1)
 
             # 方法2：多次删除键（备选，确保清空）
-            for i in range(15):
-                self.send_key('KEYCODE_DEL', after_sleep=0.01)
+            for i in range(20):
+                self.send_key(67, after_sleep=0.01)
 
         except Exception as e:
             self.logger.warning(f"ADB 清空输入框异常: {e}")

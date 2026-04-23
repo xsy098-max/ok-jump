@@ -102,7 +102,7 @@ config = {
     
     'adb': {
         'enabled': True,
-        'packages': 'com.lmd.xproject.dev',
+        'packages': ['com.dgames.g65002007.google', 'com.fivegames.g65002007.google'],
     },
     
     'supported_resolution': {

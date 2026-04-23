@@ -1524,10 +1524,9 @@ class AutoLoginTask(BaseJumpTask):
             count: 删除键发送次数
         """
         try:
-            # Android KEYCODE_DEL = 67
-            # 使用框架的 send_key 方法
+            # Android KEYCODE_DEL = 67，使用数字键码避免框架键名校验
             for i in range(count):
-                self.send_key('KEYCODE_DEL', after_sleep=0.01)
+                self.send_key(67, after_sleep=0.01)
         except Exception as e:
             self.log_error(f"多次删除键异常: {e}")
 
@@ -1558,8 +1557,8 @@ class AutoLoginTask(BaseJumpTask):
             self.click_relative(click_x, click_y)
             time.sleep(0.3)
 
-            # 删除选中的内容
-            self.send_key('KEYCODE_DEL', after_sleep=0.2)
+            # 删除选中的内容（Android KEYCODE_DEL = 67）
+            self.send_key(67, after_sleep=0.2)
 
         except Exception as e:
             self.log_error(f"双击选中+删除异常: {e}")

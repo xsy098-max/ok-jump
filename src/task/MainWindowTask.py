@@ -71,7 +71,7 @@ class MainWindowTask(BaseJumpTask):
         else:
             self.logger.warning("未检测到游戏窗口，请确保游戏已启动")
             self.logger.info("支持的窗口标题关键词: '漫画群星', 'Jump'")
-            self.logger.info("支持的模拟器ADB包名: com.fivecross.mhqdjj")
+            self.logger.info("支持的模拟器ADB包名: com.dgames.g65002007.google, com.fivegames.g65002007.google")
         
         self.logger.info("")
         self.logger.info("核心功能模块初始化完成")

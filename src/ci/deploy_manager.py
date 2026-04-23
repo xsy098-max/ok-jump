@@ -59,7 +59,7 @@ class DeployManager:
         jenkins_url: str,
         jenkins_job: str,
         emulator_path: str,
-        package_name: str = "com.lmd.xproject.dev",
+        package_name=None,
         adb_port: int = 5555,
         instance_index: int = 0,
         download_dir: str = "packages",
@@ -78,7 +78,7 @@ class DeployManager:
             jenkins_url: Jenkins服务器地址
             jenkins_job: Job名称
             emulator_path: 模拟器可执行文件路径
-            package_name: 游戏包名
+            package_name: 游戏包名，支持字符串或列表
             adb_port: ADB端口
             instance_index: 模拟器实例索引
             download_dir: APK下载目录
@@ -92,7 +92,12 @@ class DeployManager:
         """
         self.jenkins_url = jenkins_url
         self.jenkins_job = jenkins_job
-        self.package_name = package_name
+        if package_name is None:
+            self.package_names = ["com.dgames.g65002007.google", "com.fivegames.g65002007.google"]
+        elif isinstance(package_name, str):
+            self.package_names = [package_name]
+        else:
+            self.package_names = list(package_name)
         self.game_start_timeout = game_start_timeout
         self.task_trigger_timeout = task_trigger_timeout
         self.task_trigger_delay = task_trigger_delay
@@ -109,7 +114,7 @@ class DeployManager:
 
         self.emulator_manager = EmulatorManager(
             emulator_path=emulator_path,
-            package_name=package_name,
+            package_name=self.package_names,
             adb_port=adb_port,
             instance_index=instance_index,
             start_timeout=emulator_timeout
@@ -331,6 +336,7 @@ class DeployManager:
         检测游戏进程是否正在运行
 
         通过ADB检测游戏包名对应的进程是否存在。
+        支持多包名回退：依次检查所有包名。
 
         Returns:
             bool: 进程存在返回True
@@ -338,14 +344,12 @@ class DeployManager:
         try:
             from adbutils import adb
 
-            # 连接到模拟器（短超时，快速失败）
             adb.connect(f"127.0.0.1:{self.emulator_manager.adb_port}", timeout=5)
             devices = adb.device_list()
 
             if not devices:
                 return False
 
-            # 查找目标设备
             adb_port = self.emulator_manager.adb_port
             serial_patterns = [f"emulator-{adb_port}", f"127.0.0.1:{adb_port}"]
             device = None
@@ -360,16 +364,7 @@ class DeployManager:
             if device is None:
                 return False
 
-            # 使用pidof命令检测进程
-            result = device.shell(f"pidof {self.package_name}")
-            pid = result.strip()
-
-            if pid and pid.isdigit():
-                return True
-
-            # 备用方法: 使用ps命令
-            result = device.shell(f"ps | grep {self.package_name}")
-            return self.package_name in result
+            return self.emulator_manager._find_running_package(device) is not None
 
         except Exception as e:
             logger.debug(f"检测游戏进程失败: {e}")

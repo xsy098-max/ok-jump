@@ -49,17 +49,19 @@ class EmulatorManager:
     使用示例:
         manager = EmulatorManager(
             emulator_path="C:\\LDPlayer\\LDPlayer9\\dnplayer.exe",
-            package_name="com.lmd.xproject.dev"
+            package_name=["com.dgames.g65002007.google", "com.fivegames.g65002007.google"]
         )
         manager.start_emulator()
         manager.install_package(Path("game.apk"))
         manager.start_game()
     """
 
+    PACKAGE_NAMES = ["com.dgames.g65002007.google", "com.fivegames.g65002007.google"]
+
     def __init__(
         self,
         emulator_path: str,
-        package_name: str = "com.lmd.xproject.dev",
+        package_name=None,
         adb_port: int = 5555,
         instance_index: int = 0,
         start_timeout: int = 60
@@ -69,13 +71,18 @@ class EmulatorManager:
 
         Args:
             emulator_path: 模拟器可执行文件路径 (dnplayer.exe)
-            package_name: 游戏包名
+            package_name: 游戏包名，支持字符串或列表，默认使用PACKAGE_NAMES
             adb_port: ADB端口
             instance_index: 模拟器实例索引
             start_timeout: 启动超时(秒)
         """
         self.emulator_path = Path(emulator_path)
-        self.package_name = package_name
+        if package_name is None:
+            self.package_names = list(self.PACKAGE_NAMES)
+        elif isinstance(package_name, str):
+            self.package_names = [package_name]
+        else:
+            self.package_names = list(package_name)
         self.adb_port = adb_port
         self.instance_index = instance_index
         self.start_timeout = start_timeout
@@ -86,6 +93,39 @@ class EmulatorManager:
 
         # 设备序列号 (用于ADB连接)
         self.device_serial = f"emulator-{self.adb_port}"
+
+    @property
+    def package_name(self) -> str:
+        return self.package_names[0] if self.package_names else ""
+
+    def _find_installed_package(self, device) -> Optional[str]:
+        try:
+            result = device.shell("pm list packages", timeout=30)
+            for pkg in self.package_names:
+                if pkg in result:
+                    logger.info(f"检测到已安装包名: {pkg}")
+                    return pkg
+            logger.debug(f"未找到已安装包名，尝试的包名: {self.package_names}")
+            return None
+        except Exception as e:
+            logger.debug(f"检测已安装包名失败: {e}")
+            return None
+
+    def _find_running_package(self, device) -> Optional[str]:
+        try:
+            for pkg in self.package_names:
+                result = device.shell(f"pidof {pkg}")
+                pid = result.strip()
+                if pid and pid.isdigit():
+                    return pkg
+            for pkg in self.package_names:
+                result = device.shell(f"ps | grep {pkg}")
+                if pkg in result:
+                    return pkg
+            return None
+        except Exception as e:
+            logger.debug(f"检测运行中包名失败: {e}")
+            return None
 
     def start_emulator(self, timeout: Optional[int] = None) -> bool:
         """
@@ -364,17 +404,20 @@ class EmulatorManager:
         Returns:
             bool: 卸载成功返回True
         """
-        logger.info(f"开始卸载包: {self.package_name}")
+        logger.info(f"开始卸载包，尝试的包名: {self.package_names}")
 
         try:
-            # 等待ADB设备就绪
             device = self._wait_for_adb_device(timeout=30)
             if device is None:
                 raise Exception("等待ADB设备连接超时")
 
-            device.uninstall(self.package_name)
+            installed = self._find_installed_package(device)
+            if installed:
+                device.uninstall(installed)
+                logger.info(f"包卸载成功: {installed}")
+            else:
+                logger.info("未找到已安装的游戏包")
 
-            logger.info("包卸载成功")
             return True
 
         except Exception as e:
@@ -391,20 +434,22 @@ class EmulatorManager:
         Returns:
             bool: 启动成功返回True
         """
-        logger.info(f"开始启动游戏: {self.package_name}")
+        logger.info(f"开始启动游戏，尝试的包名: {self.package_names}")
 
         try:
-            # 等待ADB设备就绪
             device = self._wait_for_adb_device(timeout=30)
             if device is None:
                 raise Exception("等待ADB设备连接超时")
 
-            # 启动游戏Activity
-            # 使用monkey命令启动
-            cmd = f"monkey -p {self.package_name} -c android.intent.category.LAUNCHER 1"
+            installed = self._find_installed_package(device)
+            if not installed:
+                logger.error("未找到已安装的游戏包，无法启动")
+                return False
+
+            cmd = f"monkey -p {installed} -c android.intent.category.LAUNCHER 1"
             device.shell(cmd)
 
-            logger.info("游戏启动命令已发送")
+            logger.info(f"游戏启动命令已发送，使用包名: {installed}")
             return True
 
         except Exception as e:
@@ -429,17 +474,20 @@ class EmulatorManager:
         Returns:
             bool: 清除成功返回True
         """
-        logger.info(f"清除游戏数据: {self.package_name}")
+        logger.info(f"清除游戏数据，尝试的包名: {self.package_names}")
 
         try:
-            # 等待ADB设备就绪
             device = self._wait_for_adb_device(timeout=30)
             if device is None:
                 raise Exception("等待ADB设备连接超时")
 
-            device.shell(f"pm clear {self.package_name}")
+            installed = self._find_installed_package(device)
+            if installed:
+                device.shell(f"pm clear {installed}")
+                logger.info(f"游戏数据已清除，使用包名: {installed}")
+            else:
+                logger.info("未找到已安装的游戏包")
 
-            logger.info("游戏数据已清除")
             return True
 
         except Exception as e:
