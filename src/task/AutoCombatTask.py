@@ -235,7 +235,15 @@ class AutoCombatTask(BaseJumpTriggerTask):
             self.logger.warning("测试模式已启用 - 跳过场景检测，直接启动战斗")
         else:
             self.logger.info("正常模式已启用 - 通过YOLO自身检测动态启停战斗")
-        
+
+        # Unity 模式诊断
+        if self.is_unity():
+            conn = self._get_unity_connection()
+            self.logger.info(f"Unity 模式已确认, 连接状态: {conn is not None}")
+            if conn:
+                ping_ok = conn.ping()
+                self.logger.info(f"Unity ping: {'成功' if ping_ok else '失败'}")
+
         # 更新分辨率
         self.update_resolution()
         

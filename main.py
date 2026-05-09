@@ -463,12 +463,68 @@ def patch_task_buttons_alignment():
     logger.info('TaskButtons patched: button alignment fixed')
 
 
+def _setup_unity_dummy_capture():
+    """
+    为 Unity 纯组件模式设置虚拟截图方法。
+
+    Unity 模式通过 TCP 获取游戏数据，不需要真实截图。
+    但 ok 框架的 TaskExecutor.execute() 循环需要截图方法才能运行，
+    否则 connected() 返回 False，execute 循环静默跳过所有 trigger task。
+    """
+    import numpy as np
+    from ok import og
+
+    class UnityDummyCapture:
+        """虚拟截图：返回空白帧，仅用于满足框架运行要求"""
+        name = 'Unity Dummy'
+        description = '虚拟截图（Unity 纯组件模式）'
+        _size = (1920, 1080)
+        exit_event = None
+
+        @property
+        def width(self):
+            return self._size[0]
+
+        @property
+        def height(self):
+            return self._size[1]
+
+        def get_frame(self):
+            return np.zeros((self._size[1], self._size[0], 3), dtype=np.uint8)
+
+        def do_get_frame(self):
+            return self.get_frame()
+
+        def close(self):
+            pass
+
+        def get_name(self):
+            return self.name
+
+        def measure_if_0(self):
+            pass
+
+    capture = UnityDummyCapture()
+    og.device_manager.capture_method = capture
+
+    # 确保 executor 也能获取到 capture method
+    if hasattr(og, 'executor') and og.executor:
+        # executor.method 属性通常读取 device_manager.capture_method
+        # 如果 executor 有内部缓存，直接设置
+        if hasattr(og.executor, '_method'):
+            og.executor._method = capture
+
+    logger = Logger.get_logger(__name__)
+    logger.info('Unity 虚拟截图已设置（1920x1080 空白帧）')
+
+
 def patch_device_manager_for_unity():
     """
     Patch DeviceManager 支持 Unity 工程连接。
 
     当选择 Unity 设备时：
-    - 仍使用 PC 窗口捕获（WGC/BitBlt）进行截图
+    - 创建 UnityConnection TCP 连接
+    - 设置虚拟截图方法（框架需要 capture method 才能运行 execute 循环）
     - 输入通过 UnityConnection TCP 命令发送，不走 Interaction
     - UnityConnection 实例存储在 og.my_app._unity_connection
     """
@@ -524,9 +580,10 @@ def patch_device_manager_for_unity():
                 else:
                     logger.warning('全局对象未就绪，Unity 连接未存储')
 
-                # Unity 纯组件模式：战斗通过 TCP 命令操作，不需要窗口捕获
-                # 非战斗任务（登录/匹配等）暂不支持 Unity 模式
-                logger.info('Unity 工程连接已就绪（纯组件模式，跳过窗口捕获）')
+                # 设置虚拟截图，使框架 execute 循环能正常运行
+                _setup_unity_dummy_capture()
+
+                logger.info('Unity 工程连接已就绪（纯组件模式）')
                 return
             else:
                 logger.error('Unity 连接失败，回退到标准模式')

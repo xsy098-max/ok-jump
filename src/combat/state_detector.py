@@ -781,6 +781,7 @@ class StateDetector:
             if not info or not info.get('found', False):
                 return None
 
+            self.logger.info(f"Unity 自身检测: ({info.get('screenX', 0)}, {info.get('screenY', 0)})")
             return UnityDetectionResult(
                 center_x=info.get('screenX', 0),
                 center_y=info.get('screenY', 0),
