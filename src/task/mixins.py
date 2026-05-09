@@ -35,6 +35,8 @@ class JumpTaskMixin:
         self._background_mode_logged = False
         self._adb_cache = None
         self._adb_cache_ts = 0
+        self._unity_cache = None
+        self._unity_cache_ts = 0
 
     # ==================== 游戏语言检测 ====================
 
@@ -384,15 +386,14 @@ class JumpTaskMixin:
         """
         检查是否需要使用后台点击
 
-        注意：当使用 ADB 交互（模拟器）时，不使用 SendInput 后台点击，
-        而是让框架使用 ADB 的点击方法（input tap）。
+        注意：
+        - Unity 工程连接模式下，战斗输入走 TCP 命令，非战斗仍可能需要后台点击
+        - ADB 模式下不需要 SendInput 后台点击，直接使用 ADB 命令
 
         Returns:
             bool: True 如果游戏在后台或伪最小化状态，且不是 ADB 模式
         """
-        # 检查是否使用 ADB 交互（模拟器模式）
         if self._is_adb_interaction():
-            # ADB 模式下不需要后台点击，直接使用 ADB 命令
             return False
 
         return background_manager.is_game_in_background() or pseudo_minimize_helper.is_pseudo_minimized()
@@ -453,9 +454,61 @@ class JumpTaskMixin:
         """
         return self._is_adb_interaction()
 
+    def _is_unity_interaction(self):
+        """
+        检查当前是否使用 Unity 工程连接，带缓存（10秒）
+
+        Returns:
+            bool: True 如果使用 Unity 工程连接
+        """
+        now = time.time()
+        if self._unity_cache is not None and (now - self._unity_cache_ts) < 10:
+            return self._unity_cache
+
+        try:
+            from ok import og
+            result = False
+            if og and hasattr(og, 'my_app') and hasattr(og.my_app, '_unity_connection'):
+                conn = og.my_app._unity_connection
+                result = conn is not None and conn.is_connected()
+
+            self._unity_cache = result
+            self._unity_cache_ts = now
+            return result
+        except Exception:
+            return False
+
+    def is_unity(self):
+        """
+        检查当前是否为 Unity 工程连接模式
+
+        这是公共方法，供 MovementController、SkillController 和 StateDetector 调用。
+
+        Returns:
+            bool: True 如果使用 Unity 工程连接
+        """
+        return self._is_unity_interaction()
+
+    def _get_unity_connection(self):
+        """
+        获取 Unity 连接实例
+
+        Returns:
+            UnityConnection: 连接实例，未连接返回 None
+        """
+        try:
+            from ok import og
+            if og and hasattr(og, 'my_app') and hasattr(og.my_app, '_unity_connection'):
+                return og.my_app._unity_connection
+        except Exception:
+            pass
+        return None
+
     def send_key(self, key, down_time=0.02, after_sleep=0):
         """
-        发送按键（智能适配 ADB/Windows 模式）
+        发送按键（智能适配 Unity/ADB/Windows 模式）
+
+        Unity 模式下非战斗按键仍走 Windows 输入（战斗按键由 SkillController/MovementController 处理）
 
         Args:
             key: 按键（字符串或 Android keycode 整数）
@@ -465,7 +518,14 @@ class JumpTaskMixin:
         Returns:
             bool: 发送成功返回 True
         """
-        if self._is_adb_interaction():
+        if self._is_unity_interaction():
+            # Unity 模式：非战斗按键仍走 Windows 输入
+            if self._need_background_click():
+                self._init_background_input()
+                return background_input.send_key(key, duration=down_time)
+            else:
+                return super().send_key(key, down_time=down_time, after_sleep=after_sleep)
+        elif self._is_adb_interaction():
             if isinstance(key, int):
                 self.executor.interaction.send_key(key, down_time)
                 if after_sleep > 0:
@@ -482,7 +542,7 @@ class JumpTaskMixin:
 
     def send_key_down(self, key):
         """
-        发送按键按下（智能适配 ADB/Windows 模式）
+        发送按键按下（智能适配 Unity/ADB/Windows 模式）
 
         Args:
             key: 按键
@@ -490,7 +550,13 @@ class JumpTaskMixin:
         Returns:
             bool: 发送成功返回 True
         """
-        if self._is_adb_interaction():
+        if self._is_unity_interaction():
+            if self._need_background_click():
+                self._init_background_input()
+                return background_input.send_key_down(key)
+            else:
+                return super().send_key_down(key)
+        elif self._is_adb_interaction():
             # ADB 模式：使用框架方法
             return super().send_key_down(key)
         else:
@@ -503,7 +569,7 @@ class JumpTaskMixin:
 
     def send_key_up(self, key):
         """
-        发送按键释放（智能适配 ADB/Windows 模式）
+        发送按键释放（智能适配 Unity/ADB/Windows 模式）
 
         Args:
             key: 按键
@@ -511,7 +577,13 @@ class JumpTaskMixin:
         Returns:
             bool: 发送成功返回 True
         """
-        if self._is_adb_interaction():
+        if self._is_unity_interaction():
+            if self._need_background_click():
+                self._init_background_input()
+                return background_input.send_key_up(key)
+            else:
+                return super().send_key_up(key)
+        elif self._is_adb_interaction():
             # ADB 模式：使用框架方法
             return super().send_key_up(key)
         else:
@@ -524,7 +596,7 @@ class JumpTaskMixin:
 
     def swipe(self, from_x, from_y, to_x, to_y, duration=0.3, after_sleep=0.1):
         """
-        滑动操作（智能适配 ADB/Windows 模式）
+        滑动操作（智能适配 Unity/ADB/Windows 模式）
 
         Args:
             from_x, from_y: 起始坐标
@@ -532,8 +604,14 @@ class JumpTaskMixin:
             duration: 滑动持续时间
             after_sleep: 滑动后等待时间
         """
-        is_adb = self._is_adb_interaction()
-        if is_adb:
+        if self._is_unity_interaction():
+            # Unity 模式：仍走 Windows 输入（非战斗滑动）
+            if self._need_background_click():
+                self._init_background_input()
+                return background_input.drag(from_x, from_y, to_x, to_y, duration=duration)
+            else:
+                return super().swipe(from_x, from_y, to_x, to_y, duration, after_sleep=after_sleep)
+        elif self._is_adb_interaction():
             # ADB 模式：使用框架的 swipe（通过 ADB 命令）
             self.logger.debug(f"[swipe] ADB模式: ({from_x},{from_y}) -> ({to_x},{to_y}), 持续{duration}秒")
             return super().swipe(from_x, from_y, to_x, to_y, duration, after_sleep=after_sleep)
@@ -549,15 +627,23 @@ class JumpTaskMixin:
 
     def input_text(self, text):
         """
-        输入文本（智能适配 ADB/Windows 模式）
+        输入文本（智能适配 Unity/ADB/Windows 模式）
 
+        Unity 模式：走 Windows 输入
         ADB 模式：使用 input text 命令
         Windows 模式：逐字符发送按键
 
         Args:
             text: 要输入的文本
         """
-        if self._is_adb_interaction():
+        if self._is_unity_interaction():
+            # Unity 模式：走 Windows 逐字符输入
+            for char in str(text):
+                if char:
+                    self.send_key(char, down_time=0.05)
+                    time.sleep(0.02)
+            return True
+        elif self._is_adb_interaction():
             # ADB 模式：使用框架的 input_text 方法
             try:
                 if hasattr(self.executor, 'interaction') and hasattr(self.executor.interaction, 'input_text'):

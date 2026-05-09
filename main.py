@@ -138,7 +138,17 @@ def patch_start_controller():
             if task_class_name in SELF_MANAGED_TASKS:
                 logger.info(f'Skipping device check for self-managed task: {task_class_name}')
                 return None  # Allow the task to start without device check
-        
+
+        # Check if Unity connection is active (pure component mode, no capture needed)
+        try:
+            if og and hasattr(og, 'my_app') and hasattr(og.my_app, '_unity_connection'):
+                conn = og.my_app._unity_connection
+                if conn and conn.is_connected():
+                    logger.info('Unity connection active, skipping device error check')
+                    return None
+        except Exception:
+            pass
+
         # Get the original result
         result = original_check_device_error(self)
         
@@ -453,14 +463,90 @@ def patch_task_buttons_alignment():
     logger.info('TaskButtons patched: button alignment fixed')
 
 
+def patch_device_manager_for_unity():
+    """
+    Patch DeviceManager 支持 Unity 工程连接。
+
+    当选择 Unity 设备时：
+    - 仍使用 PC 窗口捕获（WGC/BitBlt）进行截图
+    - 输入通过 UnityConnection TCP 命令发送，不走 Interaction
+    - UnityConnection 实例存储在 og.my_app._unity_connection
+    """
+    from ok.device.DeviceManager import DeviceManager
+    logger = Logger.get_logger(__name__)
+
+    original_do_refresh = DeviceManager.do_refresh
+
+    def patched_do_refresh(self, current=False):
+        # 先执行原始刷新
+        original_do_refresh(self, current)
+
+        # 检测 Unity 连接并添加到设备列表
+        try:
+            import socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(2)
+            result = sock.connect_ex(('127.0.0.1', 9876))
+            sock.close()
+
+            if result == 0:
+                self.device_dict['unity'] = {
+                    "address": "127.0.0.1:9876",
+                    "imei": "unity",
+                    "device": "unity",
+                    "nick": "Unity Editor",
+                    "connected": True,
+                    "capture": "windows",
+                }
+            else:
+                self.device_dict.pop('unity', None)
+        except Exception:
+            self.device_dict.pop('unity', None)
+
+    DeviceManager.do_refresh = patched_do_refresh
+
+    original_do_start = DeviceManager.do_start
+
+    def patched_do_start(self):
+        # 检查是否选择了 Unity 设备
+        preferred = self.config.get('preferred', '')
+        if preferred and isinstance(preferred, str) and 'unity' in preferred:
+            logger.info('Unity 工程连接模式启动')
+
+            # 初始化 UnityConnection
+            from src.utils.UnityConnection import UnityConnection
+            conn = UnityConnection()
+            if conn.connect():
+                # 存储到全局对象
+                if og and hasattr(og, 'my_app') and og.my_app:
+                    og.my_app._unity_connection = conn
+                    logger.info('Unity 连接已建立并存储到全局对象')
+                else:
+                    logger.warning('全局对象未就绪，Unity 连接未存储')
+
+                # Unity 纯组件模式：战斗通过 TCP 命令操作，不需要窗口捕获
+                # 非战斗任务（登录/匹配等）暂不支持 Unity 模式
+                logger.info('Unity 工程连接已就绪（纯组件模式，跳过窗口捕获）')
+                return
+            else:
+                logger.error('Unity 连接失败，回退到标准模式')
+
+        # 非 Unity 模式或回退，走原始逻辑
+        original_do_start(self)
+
+    DeviceManager.do_start = patched_do_start
+    logger.info('DeviceManager patched: Unity 工程连接支持')
+
+
 def smart_device_selection():
     """
     智能设备选择
 
-    检测PC版和模拟器ADB连接状态，自动选择合适的设备：
+    检测PC版、模拟器ADB和Unity工程连接状态，自动选择合适的设备：
+    - 只有Unity可达 → 选择Unity
     - 只有PC运行 → 选择PC
     - 只有模拟器连接 → 选择ADB
-    - 两者都运行或都未运行 → 保持用户选择
+    - 多个或没有 → 保持用户选择
 
     注意：此函数必须在 OK(config) 之前执行，否则配置修改不会生效
     """
@@ -468,7 +554,7 @@ def smart_device_selection():
 
     # 获取设备状态（用于调试）
     status = DeviceDetector.get_device_status()
-    print(f'[智能设备选择] PC运行: {status["pc_running"]}, ADB连接: {status["adb_connected"]}')
+    print(f'[智能设备选择] PC运行: {status["pc_running"]}, ADB连接: {status["adb_connected"]}, Unity: {status["unity_running"]}')
 
     smart_device = DeviceDetector.get_smart_default()
     if smart_device:
@@ -737,6 +823,7 @@ if __name__ == '__main__':
     patch_start_controller()
     patch_adb_connect_error_handling()
     patch_task_buttons_alignment()
+    patch_device_manager_for_unity()
     # Initialize OK framework (will read devices.json)
     ok = OK(config)
     # Apply OCR logging patch AFTER OK is initialized (log handlers are set up then)

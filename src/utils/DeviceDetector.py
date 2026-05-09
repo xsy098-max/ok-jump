@@ -1,9 +1,10 @@
 """
 设备连接状态检测器
 
-用于检测PC版和模拟器的连接状态，实现智能设备选择
+用于检测PC版、模拟器和Unity工程的连接状态，实现智能设备选择
 """
 
+import socket
 import subprocess
 import win32gui
 
@@ -12,7 +13,7 @@ class DeviceDetector:
     """
     设备连接状态检测器
 
-    用于检测PC版游戏和模拟器ADB的连接状态，
+    用于检测PC版游戏、模拟器ADB和Unity工程的连接状态，
     实现智能默认设备选择逻辑
     """
 
@@ -24,6 +25,9 @@ class DeviceDetector:
 
     # 模拟器窗口标题关键词
     EMULATOR_KEYWORDS = ['MuMu', '雷电', '夜神', 'BlueStacks', 'Nox', 'LDPlayer', '模拟器']
+
+    # Unity 工程连接默认端口
+    UNITY_DEFAULT_PORT = 9876
 
     @classmethod
     def detect_pc_running(cls) -> bool:
@@ -110,27 +114,52 @@ class DeviceDetector:
             return False
 
     @classmethod
+    def detect_unity_running(cls) -> bool:
+        """
+        检测 Unity Editor 的 AI Custom TCP 服务器是否可达
+
+        Returns:
+            bool: True 如果 Unity TCP 服务器在端口 9876 上可连接
+        """
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(2)
+            result = sock.connect_ex(('127.0.0.1', cls.UNITY_DEFAULT_PORT))
+            sock.close()
+            return result == 0
+        except Exception:
+            return False
+
+    @classmethod
     def get_smart_default(cls) -> str | None:
         """
         智能选择默认设备
 
         根据当前连接状态智能选择设备：
+        - 只有Unity可达 → 返回 'unity'
         - 只有PC运行 → 返回 'pc'
         - 只有模拟器连接 → 返回 'adb'
-        - 两者都运行或都未运行 → 返回 None（保持用户选择）
+        - 多个或没有 → 返回 None（保持用户选择）
 
         Returns:
-            str | None: 'pc', 'adb' 或 None
+            str | None: 'unity', 'pc', 'adb' 或 None
         """
+        unity_running = cls.detect_unity_running()
         pc_running = cls.detect_pc_running()
         adb_connected = cls.detect_adb_connected()
 
-        if pc_running and not adb_connected:
-            return 'pc'
-        elif adb_connected and not pc_running:
-            return 'adb'
+        # 计算活跃设备数量
+        active_count = sum([unity_running, pc_running, adb_connected])
+
+        if active_count == 1:
+            if unity_running:
+                return 'unity'
+            elif pc_running:
+                return 'pc'
+            else:
+                return 'adb'
         else:
-            # 两者都运行或都未运行，保持用户选择
+            # 多个或没有活跃设备，保持用户选择
             return None
 
     @classmethod
@@ -139,10 +168,11 @@ class DeviceDetector:
         获取设备连接状态详情
 
         Returns:
-            dict: 包含PC和ADB连接状态的字典
+            dict: 包含PC、ADB和Unity连接状态的字典
         """
         return {
             'pc_running': cls.detect_pc_running(),
             'adb_connected': cls.detect_adb_connected(),
+            'unity_running': cls.detect_unity_running(),
             'smart_default': cls.get_smart_default()
         }

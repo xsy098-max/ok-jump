@@ -71,7 +71,7 @@ config = {
     'config_folder': 'configs',
     'gui_icon': 'icons/icon.png',
     'gui_title': '漫画群星：大集结 - 自动化工具',
-    'version': '1.5.8',
+    'version': '1.6.0',
     
     # 自定义全局对象（用于 YOLO 检测等功能）
     'my_app': ['src.globals', 'Globals'],
@@ -103,6 +103,13 @@ config = {
     'adb': {
         'enabled': True,
         'packages': ['com.dgames.g65002007.google', 'com.fivegames.g65002007.google'],
+    },
+
+    'unity': {
+        'enabled': True,
+        'host': '127.0.0.1',
+        'port': 9876,
+        'timeout': 5.0,
     },
     
     'supported_resolution': {

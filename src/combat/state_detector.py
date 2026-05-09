@@ -1,7 +1,7 @@
 """
 战斗状态检测器
 
-使用 YOLO 模型检测战场单位和状态
+使用 YOLO 模型或 Unity TCP 命令检测战场单位和状态
 """
 
 import time
@@ -11,6 +11,36 @@ from enum import Enum
 from ok import og
 
 from src.combat.labels import CombatLabel
+
+
+class UnityDetectionResult:
+    """
+    Unity 工程连接检测结果
+
+    镜像 YOLO DetectionResult 的接口，用于兼容现有战斗系统
+    """
+
+    def __init__(self, center_x, center_y, class_id, confidence=1.0):
+        self.center_x = center_x
+        self.center_y = center_y
+        self.class_id = class_id
+        self.confidence = confidence
+        self.x = center_x
+        self.y = center_y
+        self.width = 0
+        self.height = 0
+
+    @property
+    def center(self):
+        return (self.center_x, self.center_y)
+
+    @property
+    def box(self):
+        return (self.x, self.y, self.width, self.height)
+
+    @property
+    def xyxy(self):
+        return (self.x, self.y, self.x + self.width, self.y + self.height)
 
 
 class BattlefieldState(Enum):
@@ -129,69 +159,83 @@ class StateDetector:
     def _death_monitor_loop(self):
         """
         死亡状态监控循环（在后台线程中运行）
-        
+
         持续高速检测死亡状态，检测到后立即设置标志
         当死亡状态消失时（复活），自动重置标志
         """
         check_count = 0
         consecutive_death = 0  # 连续检测到死亡的次数
         consecutive_alive = 0  # 连续未检测到死亡的次数
-        
+
         while True:
             with self._death_lock:
                 if not self._death_monitor_running:
                     break
-            
+
             # 检查退出信号
             if self._should_exit():
                 self._log("死亡监控：检测到退出信号")
                 break
-            
-            # 更新帧（获取最新画面）
-            if hasattr(self.task, 'next_frame'):
-                self.task.next_frame()
-            
-            # 获取帧并检测
-            frame = self._get_frame()
-            if frame is None:
-                time.sleep(self._death_check_interval)
-                continue
-            
+
             check_count += 1
-            
+
             try:
-                results = og.my_app.yolo_detect(
-                    frame,
-                    threshold=0.5,
-                    label=CombatLabel.DEATH
-                )
-                
-                if results:
+                is_dead = False
+
+                if self._is_unity_mode():
+                    # Unity 模式：通过 TCP 命令获取死亡状态
+                    info = self._detect_self_unity()
+                    if info is None:
+                        # 玩家不存在（不在战斗中），视为存活
+                        is_dead = False
+                    else:
+                        conn = self._get_unity_connection()
+                        if conn:
+                            player_info = conn.get_player_info()
+                            is_dead = player_info.get('isDead', False)
+                else:
+                    # YOLO 模式：更新帧并检测
+                    if hasattr(self.task, 'next_frame'):
+                        self.task.next_frame()
+
+                    frame = self._get_frame()
+                    if frame is None:
+                        time.sleep(self._death_check_interval)
+                        continue
+
+                    results = og.my_app.yolo_detect(
+                        frame,
+                        threshold=0.5,
+                        label=CombatLabel.DEATH
+                    )
+                    is_dead = len(results) > 0
+
+                if is_dead:
                     consecutive_death += 1
                     consecutive_alive = 0
-                    
+
                     # 连续2次检测到死亡才确认（避免误判）
                     if consecutive_death >= 2:
                         with self._death_lock:
                             if not self._death_detected:
-                                self._log(f"死亡监控：确认死亡状态, 置信度={results[0].confidence:.2f}")
+                                self._log("死亡监控：确认死亡状态")
                             self._death_detected = True
                 else:
                     consecutive_alive += 1
                     consecutive_death = 0
-                    
+
                     # 连续3次未检测到死亡才确认复活（避免误判）
                     if consecutive_alive >= 3:
                         with self._death_lock:
                             if self._death_detected:
-                                self._log(f"死亡监控：确认复活状态")
+                                self._log("死亡监控：确认复活状态")
                             self._death_detected = False
-                            
+
             except Exception as e:
                 self._log(f"死亡监控异常: {e}")
-            
+
             time.sleep(self._death_check_interval)
-        
+
         self._log(f"死亡监控线程结束，共执行{check_count}次检测")
     
     # ==================== 同步检测方法 ====================
@@ -325,20 +369,24 @@ class StateDetector:
     def detect_self_once(self):
         """
         单次检测自身位置（不循环）
-        
+
         Returns:
             DetectionResult: 自身位置，未检测到返回 None
         """
+        # Unity 工程连接模式：通过 TCP 命令获取玩家位置
+        if self._is_unity_mode():
+            return self._detect_self_unity()
+
         frame = self._get_frame()
         if frame is None:
             return None
-        
+
         results = og.my_app.yolo_detect(
             frame,
             threshold=0.5,
             label=CombatLabel.SELF
         )
-        
+
         return results[0] if results else None
     
     def detect_allies(self):
@@ -390,11 +438,10 @@ class StateDetector:
 
     def detect_all_once(self, frame=None):
         """
-        单次全量检测：1 帧 + 1 次 YOLO 推理
+        单次全量检测：1 帧 + 1 次 YOLO 推理 或 Unity TCP 命令
 
-        使用 label=-1 让 YOLO 返回所有检测结果，然后按 class_id 分类。
-        相比 detect_self_once() + detect_allies() + detect_enemies() 的 3 次推理，
-        此方法只需 1 次推理，开销降低约 66%。
+        Unity 模式下通过 get_all_actors 命令获取所有 Actor 数据，
+        替代 YOLO 截图识别。
 
         Args:
             frame: BGR 图像。如果为 None，使用 self.task.frame。
@@ -406,6 +453,10 @@ class StateDetector:
                 enemies: list[DetectionResult]
                 has_death: bool（是否检测到 DEATH 标签）
         """
+        # Unity 工程连接模式：使用 TCP 命令替代 YOLO
+        if self._is_unity_mode():
+            return self._detect_all_unity()
+
         if frame is None:
             frame = self._get_frame()
         if frame is None:
@@ -552,19 +603,18 @@ class StateDetector:
     
     def check_combat_state_by_self_detection(self):
         """
-        通过YOLO自身检测判断战斗状态（非测试模式下使用）
-        
-        此方法执行单次自身检测，并根据结果更新战斗状态。
-        使用防抖动机制避免状态频繁切换。
-        
+        通过自身检测判断战斗状态
+
+        YOLO 模式：截图 + YOLO 检测自身
+        Unity 模式：通过 get_player_info TCP 命令检测
+
         Returns:
             tuple: (in_combat_state, state_changed)
-                - in_combat_state: 当前是否在战斗状态
-                - state_changed: 状态是否发生变化
         """
-        # 更新帧
-        if hasattr(self.task, 'next_frame'):
-            self.task.next_frame()
+        # Unity 模式：跳过 next_frame（没有窗口捕获）
+        if not self._is_unity_mode():
+            if hasattr(self.task, 'next_frame'):
+                self.task.next_frame()
         
         # 执行单次自身检测
         self_pos = self.detect_self_once()
@@ -629,3 +679,114 @@ class StateDetector:
             self._consecutive_self_found = 0
             self._consecutive_self_not_found = 0
             self._log("战斗状态已重置")
+
+    # ==================== Unity 工程连接检测 ====================
+
+    def _is_unity_mode(self):
+        """检查是否使用 Unity 工程连接模式"""
+        return self._get_unity_connection() is not None
+
+    def _get_unity_connection(self):
+        """获取 Unity 连接实例"""
+        try:
+            if og and hasattr(og, 'my_app') and hasattr(og.my_app, '_unity_connection'):
+                conn = og.my_app._unity_connection
+                if conn and conn.is_connected():
+                    return conn
+        except Exception:
+            pass
+        return None
+
+    def _detect_all_unity(self):
+        """
+        Unity 模式：通过 get_all_actors 命令获取所有 Actor 数据
+
+        Returns:
+            tuple: (self_pos, allies, enemies, has_death)
+        """
+        conn = self._get_unity_connection()
+        if conn is None:
+            return None, [], [], False
+
+        try:
+            actors = conn.get_all_actors()
+            if not actors:
+                return None, [], [], False
+
+            self_pos = None
+            allies = []
+            enemies = []
+            has_death = False
+
+            # 先获取玩家阵营
+            player_camp = None
+            for actor in actors:
+                if actor.get('isPlayer', False):
+                    player_camp = actor.get('campType')
+                    break
+
+            for actor in actors:
+                screen_x = actor.get('screenX', 0)
+                screen_y = actor.get('screenY', 0)
+                is_dead = actor.get('isDead', False)
+                is_player = actor.get('isPlayer', False)
+                camp_type = actor.get('campType', 0)
+
+                if is_dead:
+                    if is_player:
+                        has_death = True
+                    continue
+
+                # 根据阵营判断敌我
+                if is_player:
+                    class_id = CombatLabel.SELF
+                elif player_camp is not None and camp_type == player_camp:
+                    class_id = CombatLabel.ALLY
+                else:
+                    class_id = CombatLabel.ENEMY
+
+                det = UnityDetectionResult(
+                    center_x=screen_x,
+                    center_y=screen_y,
+                    class_id=class_id,
+                    confidence=1.0
+                )
+
+                if class_id == CombatLabel.SELF:
+                    self_pos = det
+                elif class_id == CombatLabel.ALLY:
+                    allies.append(det)
+                elif class_id == CombatLabel.ENEMY:
+                    enemies.append(det)
+
+            return self_pos, allies, enemies, has_death
+
+        except Exception as e:
+            self._log(f"Unity 检测失败: {e}")
+            return None, [], [], False
+
+    def _detect_self_unity(self):
+        """
+        Unity 模式：获取玩家自身位置
+
+        Returns:
+            UnityDetectionResult: 玩家位置，未在战斗中返回 None
+        """
+        conn = self._get_unity_connection()
+        if conn is None:
+            return None
+
+        try:
+            info = conn.get_player_info()
+            if not info or not info.get('found', False):
+                return None
+
+            return UnityDetectionResult(
+                center_x=info.get('screenX', 0),
+                center_y=info.get('screenY', 0),
+                class_id=CombatLabel.SELF,
+                confidence=1.0
+            )
+        except Exception as e:
+            self._log(f"Unity 自身检测失败: {e}")
+            return None

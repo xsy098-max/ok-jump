@@ -21,6 +21,7 @@ import pydirectinput
 
 from ok import og
 from src.utils.BackgroundInputHelper import background_input
+from src.utils.UnityConnection import SKILL_BUTTON_ATTACK, SKILL_BUTTON_SKILL1, SKILL_BUTTON_SKILL2, SKILL_BUTTON_ULTIMATE
 
 # 禁用 pydirectinput 的安全检查
 pydirectinput.FAILSAFE = False
@@ -153,14 +154,14 @@ class SkillController:
             # 检查 task 是否有 is_adb 方法
             if not hasattr(self.task, 'is_adb'):
                 return False
-            
+
             # 调用 is_adb 方法（mixins.py 中已有备用检测逻辑）
             result = self.task.is_adb()
-            
+
             # 确保返回值是布尔类型
             if not isinstance(result, bool):
                 return False
-            
+
             return result
         except Exception as e:
             try:
@@ -168,6 +169,27 @@ class SkillController:
             except Exception:
                 pass
             return False
+
+    def is_unity(self):
+        """检测是否为 Unity 工程连接模式"""
+        try:
+            if not hasattr(self.task, 'is_unity'):
+                return False
+            result = self.task.is_unity()
+            return bool(result)
+        except Exception:
+            return False
+
+    def _get_unity_connection(self):
+        """获取 Unity 连接实例"""
+        try:
+            if og and hasattr(og, 'my_app') and hasattr(og.my_app, '_unity_connection'):
+                conn = og.my_app._unity_connection
+                if conn and conn.is_connected():
+                    return conn
+        except Exception:
+            pass
+        return None
     
     def _init_background_input(self):
         """初始化后台输入助手"""
@@ -462,6 +484,11 @@ class SkillController:
     
     def do_attack(self):
         """释放普通攻击"""
+        if self.is_unity():
+            conn = self._get_unity_connection()
+            if conn:
+                conn.use_skill(SKILL_BUTTON_ATTACK)
+            return
         is_adb_mode = self.is_adb()
         if is_adb_mode:
             # ADB 模式：尝试点击屏幕按钮，同时发送键盘按键作为备选
@@ -475,6 +502,11 @@ class SkillController:
     
     def do_skill1(self):
         """释放技能1"""
+        if self.is_unity():
+            conn = self._get_unity_connection()
+            if conn:
+                conn.use_skill(SKILL_BUTTON_SKILL1)
+            return
         is_adb_mode = self.is_adb()
         if is_adb_mode:
             self._click_skill_button('skill1')
@@ -486,6 +518,11 @@ class SkillController:
     
     def do_skill2(self):
         """释放技能2"""
+        if self.is_unity():
+            conn = self._get_unity_connection()
+            if conn:
+                conn.use_skill(SKILL_BUTTON_SKILL2)
+            return
         is_adb_mode = self.is_adb()
         if is_adb_mode:
             self._click_skill_button('skill2')
@@ -497,6 +534,11 @@ class SkillController:
     
     def do_ultimate(self):
         """释放大招"""
+        if self.is_unity():
+            conn = self._get_unity_connection()
+            if conn:
+                conn.use_skill(SKILL_BUTTON_ULTIMATE)
+            return
         is_adb_mode = self.is_adb()
         if is_adb_mode:
             self._click_skill_button('ultimate')

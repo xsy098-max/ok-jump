@@ -76,6 +76,22 @@ class MovementController:
     def is_adb(self):
         """检测是否为 ADB 模式（手机端）"""
         return hasattr(self.task, 'is_adb') and self.task.is_adb()
+
+    def is_unity(self):
+        """检测是否为 Unity 工程连接模式"""
+        return hasattr(self.task, 'is_unity') and self.task.is_unity()
+
+    def _get_unity_connection(self):
+        """获取 Unity 连接实例"""
+        try:
+            from ok import og
+            if og and hasattr(og, 'my_app') and hasattr(og.my_app, '_unity_connection'):
+                conn = og.my_app._unity_connection
+                if conn and conn.is_connected():
+                    return conn
+        except Exception:
+            pass
+        return None
     
     def _init_background_input(self):
         """初始化后台输入助手"""
@@ -116,6 +132,9 @@ class MovementController:
             self_x, self_y: 自身坐标（可选，用于计算方向）
             should_stop_callback: 可选回调函数，返回 True 时中断移动
         """
+        if self.is_unity():
+            self._move_unity_towards(target_x, target_y, self_x, self_y)
+            return
         if self.is_adb():
             self._move_adb_towards(target_x, target_y, self_x, self_y, should_stop_callback)
         else:
@@ -129,6 +148,9 @@ class MovementController:
             target_x, target_y: 目标坐标
             self_x, self_y: 自身坐标（可选）
         """
+        if self.is_unity():
+            self._move_unity_away(target_x, target_y, self_x, self_y)
+            return
         if self.is_adb():
             self._move_adb_away(target_x, target_y, self_x, self_y)
         else:
@@ -160,6 +182,13 @@ class MovementController:
     
     def stop(self):
         """停止移动"""
+        if self.is_unity():
+            conn = self._get_unity_connection()
+            if conn:
+                conn.stop_move()
+            self._is_moving = False
+            self._current_direction = None
+            return
         if self.is_adb():
             self._stop_adb()
         else:
@@ -757,3 +786,58 @@ class MovementController:
         time_needed = normalized_remaining / speed
 
         return max(0.05, time_needed)
+
+    # ==================== Unity 工程连接移动 ====================
+
+    def _move_unity_towards(self, target_x, target_y, self_x=None, self_y=None):
+        """Unity 模式向目标移动"""
+        if self_x is None or self_y is None:
+            frame = self.task.frame
+            if frame is not None:
+                self_x = frame.shape[1] // 2
+                self_y = frame.shape[0] // 2
+            else:
+                return
+
+        dx = target_x - self_x
+        dy = target_y - self_y
+        length = math.sqrt(dx * dx + dy * dy)
+
+        if length < 30:
+            return
+
+        # 归一化方向，Y 轴翻转（屏幕 Y 向下为正，Unity 移动 Y 向上为正）
+        norm_dx = dx / length
+        norm_dy = -dy / length
+
+        conn = self._get_unity_connection()
+        if conn:
+            conn.set_move_dir(norm_dx, norm_dy, length)
+            self._is_moving = True
+            self._current_direction = ['unity_move']
+
+    def _move_unity_away(self, target_x, target_y, self_x=None, self_y=None):
+        """Unity 模式远离目标"""
+        if self_x is None or self_y is None:
+            frame = self.task.frame
+            if frame is not None:
+                self_x = frame.shape[1] // 2
+                self_y = frame.shape[0] // 2
+            else:
+                return
+
+        dx = self_x - target_x
+        dy = self_y - target_y
+        length = math.sqrt(dx * dx + dy * dy)
+
+        if length < 30:
+            return
+
+        norm_dx = dx / length
+        norm_dy = -dy / length
+
+        conn = self._get_unity_connection()
+        if conn:
+            conn.set_move_dir(norm_dx, norm_dy, length)
+            self._is_moving = True
+            self._current_direction = ['unity_move']
