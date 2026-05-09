@@ -480,6 +480,7 @@ def _setup_unity_dummy_capture():
         description = '虚拟截图（Unity 纯组件模式）'
         _size = (1920, 1080)
         exit_event = None
+        _connected = True
 
         @property
         def width(self):
@@ -488,6 +489,9 @@ def _setup_unity_dummy_capture():
         @property
         def height(self):
             return self._size[1]
+
+        def connected(self):
+            return self._connected
 
         def get_frame(self):
             return np.zeros((self._size[1], self._size[0], 3), dtype=np.uint8)
