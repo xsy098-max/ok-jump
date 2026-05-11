@@ -166,11 +166,10 @@ def patch_start_controller():
     original_do_start = getattr(StartController, 'do_start', None)
 
     def patched_do_start(self, task=None, exit_after=False):
-        from ok import og
+        from ok import og, TriggerTask
         from ok.gui.Communicate import communicate
+        import threading
 
-        # 先调用原始 do_start 执行设备检查和前置步骤
-        # 但拦截最后 task.enable() + og.executor.start() 的部分
         communicate.starting_emulator.emit(False, None, self.start_timeout)
         try:
             og.device_manager.do_refresh(True)
@@ -187,17 +186,40 @@ def patch_start_controller():
                 task.exit_after_task = True
                 communicate.task.emit(task)
 
+        # Unity 模式：TaskExecutor 是 Cython 编译类无法 patch，
+        # connected() 返回 False 导致 execute 循环不处理任务。
+        # 绕过 executor，直接在独立线程中运行任务。
+        if _is_unity_active() and task:
+            task.enable()
+            logger.info(f'Unity 模式：在独立线程中启动 {task.name}')
+
+            def _run_unity_task():
+                try:
+                    if isinstance(task, TriggerTask):
+                        # trigger task: 自定义循环替代 executor
+                        _unity_trigger_loop(task)
+                    else:
+                        # onetime task: 直接运行
+                        task.run()
+                except Exception as e:
+                    logger.error(f'{task.name} 执行异常: {e}')
+                finally:
+                    task.disable()
+                    communicate.task.emit(task)
+
+            t = threading.Thread(target=_run_unity_task, name=f'UnityTask-{task.name}', daemon=True)
+            t.start()
+            communicate.starting_emulator.emit(True, None, 0)
+            return
+
         if task:
             task.enable()
             # 检查 executor 是否正被 trigger task 占据
             executor = getattr(og, 'executor', None)
             if executor and executor.current_task is not None:
-                # executor 线程被 trigger task（如 AutoCombatTask）的阻塞式 run() 占据
-                # og.executor.start() 发现线程已在运行就不再启动，新任务永远不会被执行
-                # 修复：直接在独立线程中运行 onetime task，绕过 executor
                 current = executor.current_task
                 logger.info(f'Executor 被 {current.name} 占据，在独立线程中启动 {task.name}')
-                import threading
+
                 def _run_task_directly():
                     try:
                         logger.info(f'独立线程启动 {task.name}')
@@ -208,6 +230,7 @@ def patch_start_controller():
                     finally:
                         task.disable()
                         communicate.task.emit(task)
+
                 thread = threading.Thread(target=_run_task_directly, name=f'TaskThread-{task.name}', daemon=True)
                 thread.start()
                 communicate.starting_emulator.emit(True, None, 0)
@@ -474,45 +497,26 @@ def _is_unity_active():
     return False
 
 
-def _patch_task_executor_for_unity():
+def _unity_trigger_loop(task):
     """
-    直接 patch TaskExecutor 使其在 Unity 模式下正常工作。
+    Unity 模式下的 trigger task 循环，替代 TaskExecutor.execute()。
 
-    框架的 execute() 循环依赖 connected() 和 next_frame()，
-    但 Unity 纯组件模式不需要真实截图。通过 patch 让框架以为已连接，
-    并返回空白帧满足框架要求。
+    TaskExecutor 是 Cython 编译类无法 patch，其 execute 循环在 Unity 模式下
+    因 connected() 返回 False 而不处理任务。此函数提供等价的触发逻辑。
     """
-    import numpy as np
-    from ok import TaskExecutor
-
-    _original_connected = TaskExecutor.connected
-    _original_next_frame = TaskExecutor.next_frame
-    _original_can_capture = TaskExecutor.can_capture
-
-    _dummy_frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
-
-    def patched_connected(self):
-        if _is_unity_active():
-            return True
-        return _original_connected(self)
-
-    def patched_next_frame(self):
-        if _is_unity_active():
-            self._frame = _dummy_frame
-            return self._frame
-        return _original_next_frame(self)
-
-    def patched_can_capture(self):
-        if _is_unity_active():
-            return True
-        return _original_can_capture(self)
-
-    TaskExecutor.connected = patched_connected
-    TaskExecutor.next_frame = patched_next_frame
-    TaskExecutor.can_capture = patched_can_capture
-
+    import time
     logger = Logger.get_logger(__name__)
-    logger.info('TaskExecutor patched: Unity 模式 connected/next_frame/can_capture')
+    logger.info(f'Unity trigger 循环启动: {task.name}')
+    try:
+        while not og.executor.exit_event.is_set():
+            try:
+                if task.should_trigger():
+                    task.trigger()
+            except Exception as e:
+                logger.error(f'Unity trigger 循环异常: {e}')
+            time.sleep(0.5)
+    finally:
+        logger.info(f'Unity trigger 循环退出: {task.name}')
 
 
 def patch_device_manager_for_unity():
@@ -576,9 +580,6 @@ def patch_device_manager_for_unity():
                     logger.info('Unity 连接已建立并存储到全局对象')
                 else:
                     logger.warning('全局对象未就绪，Unity 连接未存储')
-
-                # Patch TaskExecutor 使框架在 Unity 模式下正常运行
-                _patch_task_executor_for_unity()
 
                 logger.info('Unity 工程连接已就绪（纯组件模式）')
                 return

@@ -71,7 +71,7 @@ config = {
     'config_folder': 'configs',
     'gui_icon': 'icons/icon.png',
     'gui_title': '漫画群星：大集结 - 自动化工具',
-    'version': '1.6.1',
+    'version': '1.6.2',
     
     # 自定义全局对象（用于 YOLO 检测等功能）
     'my_app': ['src.globals', 'Globals'],
@@ -135,6 +135,7 @@ config = {
         ['src.task.CITestTask', 'CITestTask'],  # CI自动化测试任务（置顶）
         ['src.task.TestAllInOneTask', 'TestAllInOneTask'],  # 测试一条龙任务
         ['src.task.AutoLoginTask', 'AutoLoginTask'],
+        ['src.task.AutoLoginTaskUnity', 'AutoLoginTask-Unity'],
         ['src.task.AutoTutorialTask', 'AutoTutorialTask'],
         ['src.task.AutoMatchTask', 'AutoMatchTask'],
         ['src.task.DailyTask', 'DailyTask'],

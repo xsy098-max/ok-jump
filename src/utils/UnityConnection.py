@@ -213,3 +213,75 @@ class UnityConnection:
             dict: 响应
         """
         return self.send_command('stop_move')
+
+    # ==================== 登录自动化 ====================
+
+    def get_login_state(self):
+        """
+        获取当前登录界面状态
+
+        Returns:
+            str: "BeforeLogin" | "AccountLogin" | "BeginGame" | "MainCity" | "Unknown"
+        """
+        resp = self.send_command('automation_get_login_state')
+        if resp.get('status') != 'ok':
+            return 'Unknown'
+        try:
+            data = json.loads(resp.get('message', '{}'))
+            return data.get('state', 'Unknown')
+        except (json.JSONDecodeError, TypeError):
+            return 'Unknown'
+
+    def set_account(self, account):
+        """
+        设置账号名
+
+        Args:
+            account: 账号字符串
+
+        Returns:
+            bool: 设置成功返回 True
+        """
+        payload = {'account': account}
+        resp = self.send_command('automation_set_account', payload)
+        return resp.get('status') == 'ok'
+
+    def click_privacy(self):
+        """
+        点击隐私协议复选框
+
+        Returns:
+            bool: 操作成功返回 True
+        """
+        resp = self.send_command('automation_click_privacy')
+        return resp.get('status') == 'ok'
+
+    def click_enter_game(self):
+        """
+        点击"进入游戏"按钮（BeforeLogin 界面）
+
+        Returns:
+            bool: 操作成功返回 True
+        """
+        resp = self.send_command('automation_click_enter_game')
+        return resp.get('status') == 'ok'
+
+    def click_login(self):
+        """
+        点击"登录"按钮（AccountLogin 界面）
+
+        Returns:
+            bool: 操作成功返回 True
+        """
+        resp = self.send_command('automation_click_login')
+        return resp.get('status') == 'ok'
+
+    def click_start_game(self):
+        """
+        点击"开始游戏"按钮（BeginGame 界面）
+
+        Returns:
+            bool: 操作成功返回 True
+        """
+        resp = self.send_command('automation_click_start_game')
+        return resp.get('status') == 'ok'
