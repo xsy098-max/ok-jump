@@ -463,63 +463,56 @@ def patch_task_buttons_alignment():
     logger.info('TaskButtons patched: button alignment fixed')
 
 
-def _setup_unity_dummy_capture():
-    """
-    为 Unity 纯组件模式设置虚拟截图方法。
+def _is_unity_active():
+    """检查 Unity 连接是否活跃"""
+    try:
+        if og and hasattr(og, 'my_app') and hasattr(og.my_app, '_unity_connection'):
+            conn = og.my_app._unity_connection
+            return conn is not None and conn.is_connected()
+    except Exception:
+        pass
+    return False
 
-    Unity 模式通过 TCP 获取游戏数据，不需要真实截图。
-    但 ok 框架的 TaskExecutor.execute() 循环需要截图方法才能运行，
-    否则 connected() 返回 False，execute 循环静默跳过所有 trigger task。
+
+def _patch_task_executor_for_unity():
+    """
+    直接 patch TaskExecutor 使其在 Unity 模式下正常工作。
+
+    框架的 execute() 循环依赖 connected() 和 next_frame()，
+    但 Unity 纯组件模式不需要真实截图。通过 patch 让框架以为已连接，
+    并返回空白帧满足框架要求。
     """
     import numpy as np
-    from ok import og
+    from ok import TaskExecutor
 
-    class UnityDummyCapture:
-        """虚拟截图：返回空白帧，仅用于满足框架运行要求"""
-        name = 'Unity Dummy'
-        description = '虚拟截图（Unity 纯组件模式）'
-        _size = (1920, 1080)
-        exit_event = None
-        _connected = True
+    _original_connected = TaskExecutor.connected
+    _original_next_frame = TaskExecutor.next_frame
+    _original_can_capture = TaskExecutor.can_capture
 
-        @property
-        def width(self):
-            return self._size[0]
+    _dummy_frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
 
-        @property
-        def height(self):
-            return self._size[1]
+    def patched_connected(self):
+        if _is_unity_active():
+            return True
+        return _original_connected(self)
 
-        def connected(self):
-            return self._connected
+    def patched_next_frame(self):
+        if _is_unity_active():
+            self._frame = _dummy_frame
+            return self._frame
+        return _original_next_frame(self)
 
-        def get_frame(self):
-            return np.zeros((self._size[1], self._size[0], 3), dtype=np.uint8)
+    def patched_can_capture(self):
+        if _is_unity_active():
+            return True
+        return _original_can_capture(self)
 
-        def do_get_frame(self):
-            return self.get_frame()
-
-        def close(self):
-            pass
-
-        def get_name(self):
-            return self.name
-
-        def measure_if_0(self):
-            pass
-
-    capture = UnityDummyCapture()
-    og.device_manager.capture_method = capture
-
-    # 确保 executor 也能获取到 capture method
-    if hasattr(og, 'executor') and og.executor:
-        # executor.method 属性通常读取 device_manager.capture_method
-        # 如果 executor 有内部缓存，直接设置
-        if hasattr(og.executor, '_method'):
-            og.executor._method = capture
+    TaskExecutor.connected = patched_connected
+    TaskExecutor.next_frame = patched_next_frame
+    TaskExecutor.can_capture = patched_can_capture
 
     logger = Logger.get_logger(__name__)
-    logger.info('Unity 虚拟截图已设置（1920x1080 空白帧）')
+    logger.info('TaskExecutor patched: Unity 模式 connected/next_frame/can_capture')
 
 
 def patch_device_manager_for_unity():
@@ -528,7 +521,7 @@ def patch_device_manager_for_unity():
 
     当选择 Unity 设备时：
     - 创建 UnityConnection TCP 连接
-    - 设置虚拟截图方法（框架需要 capture method 才能运行 execute 循环）
+    - Patch TaskExecutor 使 Unity 模式下正常运行
     - 输入通过 UnityConnection TCP 命令发送，不走 Interaction
     - UnityConnection 实例存储在 og.my_app._unity_connection
     """
@@ -584,8 +577,8 @@ def patch_device_manager_for_unity():
                 else:
                     logger.warning('全局对象未就绪，Unity 连接未存储')
 
-                # 设置虚拟截图，使框架 execute 循环能正常运行
-                _setup_unity_dummy_capture()
+                # Patch TaskExecutor 使框架在 Unity 模式下正常运行
+                _patch_task_executor_for_unity()
 
                 logger.info('Unity 工程连接已就绪（纯组件模式）')
                 return
