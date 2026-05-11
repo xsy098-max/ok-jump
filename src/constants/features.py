@@ -30,6 +30,7 @@ class Features:
     ENTER_GAME_BUTTON = 'enter_game_button'    # 进入游戏按钮
     START_GAME_BUTTON = 'start_game_button'    # 开始游戏按钮
     LOGIN_BUTTON = 'login_button'              # 登录按钮
+    LOGIN_METHOD_BUTTON = 'login_method_button'  # 输账号登录按钮
 
     # 登录界面文本
     AGE_PROMPT_TEXT = 'age_prompt_text'        # 适龄提示文本

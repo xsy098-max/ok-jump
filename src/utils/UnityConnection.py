@@ -169,6 +169,7 @@ class UnityConnection:
         """
         resp = self.send_command('get_player_info')
         if resp.get('status') != 'ok':
+            logger.debug(f"get_player_info 响应: {resp}")
             return {}
         try:
             return json.loads(resp.get('message', '{}'))
@@ -285,3 +286,54 @@ class UnityConnection:
         """
         resp = self.send_command('automation_click_start_game')
         return resp.get('status') == 'ok'
+
+    def set_new_guide(self, enabled=True):
+        """
+        设置新手引导开关状态（BeginGame 界面）
+
+        Args:
+            enabled: True 启用新手引导，False 关闭
+
+        Returns:
+            bool: 操作成功返回 True
+        """
+        payload = {'enabled': enabled}
+        resp = self.send_command('automation_set_new_guide', payload)
+        return resp.get('status') == 'ok'
+
+    def analyze_screen(self):
+        """
+        分析当前画面像素统计，检测白块/粉块/黑屏等渲染异常
+
+        Returns:
+            dict: {'white': float, 'pink': float, 'black': float} 百分比，
+                  失败时返回 {'white': -1, 'pink': -1, 'black': -1}
+        """
+        empty = {'white': -1, 'pink': -1, 'black': -1}
+        resp = self.send_command('automation_analyze_screen')
+        if resp.get('status') != 'ok':
+            return empty
+        try:
+            return json.loads(resp.get('message', '{}'))
+        except (json.JSONDecodeError, TypeError):
+            return empty
+
+    # ==================== 自动战斗（游戏内置 AI） ====================
+
+    def start_auto_battle(self):
+        """
+        激活游戏内置 AI 接管玩家英雄战斗
+
+        Returns:
+            dict: 响应
+        """
+        return self.send_command('automation_start_auto_battle')
+
+    def stop_auto_battle(self):
+        """
+        关闭游戏内置 AI，交还控制权
+
+        Returns:
+            dict: 响应
+        """
+        return self.send_command('automation_stop_auto_battle')

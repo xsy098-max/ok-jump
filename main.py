@@ -180,6 +180,9 @@ def patch_start_controller():
         if not self.start_device():
             return
 
+        # 根据设备类型自动切换战斗触发器
+        _auto_enable_correct_combat_task()
+
         if isinstance(task, int):
             task = og.executor.onetime_tasks[task]
             if exit_after and task:
@@ -189,26 +192,58 @@ def patch_start_controller():
         # Unity 模式：TaskExecutor 是 Cython 编译类无法 patch，
         # connected() 返回 False 导致 execute 循环不处理任务。
         # 绕过 executor，直接在独立线程中运行任务。
-        if _is_unity_active() and task:
-            task.enable()
-            logger.info(f'Unity 模式：在独立线程中启动 {task.name}')
+        if _is_unity_active():
+            # Unity 模式：TaskExecutor 是 Cython 编译类无法 patch，
+            # connected() 返回 False 导致 execute 循环不处理任务。
+            # 绕过 executor，直接在独立线程中运行任务。
 
-            def _run_unity_task():
+            if task:
                 try:
-                    if isinstance(task, TriggerTask):
-                        # trigger task: 自定义循环替代 executor
-                        _unity_trigger_loop(task)
-                    else:
-                        # onetime task: 直接运行
-                        task.run()
-                except Exception as e:
-                    logger.error(f'{task.name} 执行异常: {e}')
-                finally:
-                    task.disable()
-                    communicate.task.emit(task)
+                    task.enable()
+                except (AttributeError, TypeError) as e:
+                    logger.warning(f'Unity 模式 enable() 跳过: {e}')
+                    try:
+                        task._enabled = True
+                    except Exception:
+                        pass
+                logger.info(f'Unity 模式：在独立线程中启动 {task.name}')
 
-            t = threading.Thread(target=_run_unity_task, name=f'UnityTask-{task.name}', daemon=True)
-            t.start()
+                def _run_unity_task():
+                    try:
+                        if isinstance(task, TriggerTask):
+                            _unity_trigger_loop(task)
+                        else:
+                            task.run()
+                    except Exception as e:
+                        logger.error(f'{task.name} 执行异常: {e}')
+                    finally:
+                        try:
+                            task.disable()
+                        except (AttributeError, TypeError):
+                            try:
+                                task._enabled = False
+                            except Exception:
+                                pass
+                        communicate.task.emit(task)
+
+                t = threading.Thread(target=_run_unity_task, name=f'UnityTask-{task.name}', daemon=True)
+                t.start()
+            else:
+                # 没有指定具体任务，启动所有已启用的触发器任务
+                executor = getattr(og, 'executor', None)
+                if executor:
+                    for tt in executor.trigger_tasks:
+                        if tt._enabled:
+                            logger.info(f'Unity 模式：启动触发器任务 {tt.name}')
+
+                            def _run_trigger(t=tt):
+                                try:
+                                    _unity_trigger_loop(t)
+                                except Exception as e:
+                                    logger.error(f'{t.name} 触发器异常: {e}')
+
+                            threading.Thread(target=_run_trigger, name=f'UnityTrigger-{tt.name}', daemon=True).start()
+
             communicate.starting_emulator.emit(True, None, 0)
             return
 
@@ -487,7 +522,7 @@ def patch_task_buttons_alignment():
 
 
 def _is_unity_active():
-    """检查 Unity 连接是否活跃"""
+    """检查 Unity 连接是否活跃（连接对象已创建）"""
     try:
         if og and hasattr(og, 'my_app') and hasattr(og.my_app, '_unity_connection'):
             conn = og.my_app._unity_connection
@@ -495,6 +530,75 @@ def _is_unity_active():
     except Exception:
         pass
     return False
+
+
+def _is_unity_port_open():
+    """检查 Unity TCP 端口是否可达（不需要连接对象）"""
+    try:
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)
+        result = sock.connect_ex(('127.0.0.1', 9876))
+        sock.close()
+        return result == 0
+    except Exception:
+        return False
+
+
+def _auto_enable_correct_combat_task():
+    """根据设备类型自动启用正确的战斗触发器：Unity 或 PC/模拟器"""
+    _logger = Logger.get_logger(__name__)
+    try:
+        if not og:
+            _logger.debug('自动切换: og 为空')
+            return
+        if not hasattr(og, 'executor') or not og.executor:
+            _logger.debug('自动切换: executor 未就绪')
+            return
+        is_unity = _is_unity_port_open()
+        trigger_tasks = og.executor.trigger_tasks
+        _logger.info(f'自动切换: is_unity={is_unity}, triggers={len(trigger_tasks)}')
+        for task in trigger_tasks:
+            name = getattr(task, 'name', '')
+            _logger.info(f'检查触发器: name={name}, enabled={getattr(task, "enabled", "?")}')
+            changed = False
+            if 'Unity' in name:
+                if is_unity:
+                    try:
+                        task.enable()
+                    except (AttributeError, TypeError):
+                        task._enabled = True
+                    changed = True
+                    _logger.info(f'自动启用 Unity 战斗触发器: {name}')
+                else:
+                    try:
+                        task.disable()
+                    except (AttributeError, TypeError):
+                        task._enabled = False
+                    changed = True
+            elif 'Combat' in name:
+                if not is_unity:
+                    try:
+                        task.enable()
+                    except Exception:
+                        pass
+                    changed = True
+                    _logger.info(f'自动启用 PC/模拟器战斗触发器: {name}')
+                else:
+                    try:
+                        task.disable()
+                    except Exception:
+                        pass
+                    changed = True
+            # 同步 GUI 开关状态
+            if changed:
+                try:
+                    from ok.gui.Communicate import communicate
+                    communicate.task.emit(task)
+                except Exception:
+                    pass
+    except Exception as e:
+        _logger.warning(f'自动切换战斗触发器失败: {e}')
 
 
 def _unity_trigger_loop(task):
@@ -511,7 +615,12 @@ def _unity_trigger_loop(task):
         while not og.executor.exit_event.is_set():
             try:
                 if task.should_trigger():
-                    task.trigger()
+                    # 直接调用 run() 而非 trigger()，
+                    # trigger() 是 Cython 编译方法，在 interaction=None 时会静默失败
+                    task.run()
+                    # run() 返回后等待一段时间再检查触发条件
+                    time.sleep(1.0)
+                    continue
             except Exception as e:
                 logger.error(f'Unity trigger 循环异常: {e}')
             time.sleep(0.5)
@@ -559,6 +668,13 @@ def patch_device_manager_for_unity():
                 self.device_dict.pop('unity', None)
         except Exception:
             self.device_dict.pop('unity', None)
+
+        # 设备列表更新后，自动切换战斗触发器
+        try:
+            _auto_enable_correct_combat_task()
+        except Exception as e:
+            _ref_logger = Logger.get_logger(__name__)
+            _ref_logger.debug(f'设备刷新时自动切换触发器异常: {e}')
 
     DeviceManager.do_refresh = patched_do_refresh
 
@@ -895,8 +1011,13 @@ if __name__ == '__main__':
         if _schedule_timer:
             logger = Logger.get_logger(__name__)
             logger.info('定时任务调度器延迟初始化完成')
-    
+
+    def delayed_auto_enable_combat():
+        """延迟自动启用正确的战斗触发器（等 executor 和 GUI 就绪）"""
+        _auto_enable_correct_combat_task()
+
     from PySide6.QtCore import QTimer
     QTimer.singleShot(1000, delayed_init_scheduler)  # 1秒后初始化
+    QTimer.singleShot(2000, delayed_auto_enable_combat)  # 2秒后自动切换触发器
     
     ok.start()

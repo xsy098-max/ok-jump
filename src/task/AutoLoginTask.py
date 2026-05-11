@@ -35,6 +35,7 @@ class AutoLoginTask(BaseJumpTask):
     LOGIN_SCREEN_1 = 'login_screen_1'      # 账户登录界面
     LOGIN_SCREEN_2 = 'login_screen_2'      # 开始游戏界面
     LOADING_SCREEN = 'loading_screen'      # 加载界面（新增）
+    LOGIN_METHOD_SCREEN = 'login_method_screen'  # 登录方式选择界面
     WENJUAN_SCREEN = 'wenjuan_screen'      # 问卷调查界面
     CHARACTER_SELECTION_SCREEN = 'character_selection_screen'  # 角色选择界面
     UNKNOWN_SCREEN = 'unknown_screen'      # 未知界面
@@ -653,6 +654,10 @@ class AutoLoginTask(BaseJumpTask):
                 # 加载界面 - 特殊处理，不增加尝试次数
                 action = self._handle_loading_screen
                 self._unknown_screen_count = 0  # 重置未知界面计数
+            elif current_screen == self.LOGIN_METHOD_SCREEN:
+                # 登录方式选择界面 - 点击输账号登录
+                action = self._handle_login_method_screen
+                self._unknown_screen_count = 0
             elif current_screen == self.CHARACTER_SELECTION_SCREEN:
                 # 角色选择界面 - 登录成功
                 self.log_info("检测到角色选择界面，登录成功")
@@ -746,6 +751,7 @@ class AutoLoginTask(BaseJumpTask):
             self.LOGIN_SCREEN_1: self._handle_login_screen_1,
             self.LOGIN_SCREEN_2: self._handle_login_screen_2,
             self.LOADING_SCREEN: self._handle_loading_screen,
+            self.LOGIN_METHOD_SCREEN: self._handle_login_method_screen,
         }
         return action_map.get(screen_type, self._handle_unknown_screen)
 
@@ -834,7 +840,11 @@ class AutoLoginTask(BaseJumpTask):
         # 优先检测加载界面（最高优先级）
         if self._check_loading_screen():
             return self.LOADING_SCREEN
-    
+
+        # 检测登录方式选择界面（加载界面之后，角色选择之前）
+        if self._check_login_method_screen():
+            return self.LOGIN_METHOD_SCREEN
+
         texts = self._get_ocr_texts()
     
         # 检测角色选择界面（登录成功）
@@ -872,6 +882,68 @@ class AutoLoginTask(BaseJumpTask):
         except ValueError:
             pass
 
+        return False
+
+    def _check_login_method_screen(self):
+        """
+        检测是否为登录方式选择界面
+
+        该界面出现在加载界面之前，包含"输账号登录"按钮
+
+        Returns:
+            bool: True 如果检测到登录方式选择界面
+        """
+        # 方法1：特征图形识别（优先）
+        try:
+            button = self.find_one(Features.LOGIN_METHOD_BUTTON, threshold=0.6)
+            if button:
+                self.log_debug("检测到登录方式选择界面(特征匹配)")
+                return True
+        except ValueError:
+            pass
+
+        # 方法2：OCR 文字识别（备选，自动支持简繁体）
+        texts = self._get_ocr_texts()
+        if texts:
+            account_login = self.find_boxes(texts, match=re.compile(r"输账号登录"))
+            if account_login and len(account_login) > 0:
+                self.log_debug("检测到登录方式选择界面(OCR)")
+                return True
+
+        return False
+
+    def _handle_login_method_screen(self):
+        """
+        处理登录方式选择界面 - 点击输账号登录按钮
+
+        Returns:
+            bool: True 如果成功点击
+        """
+        self.log_info("处理登录方式选择界面 - 点击输账号登录按钮")
+
+        # 方法1：特征图形识别点击（优先）
+        try:
+            button = self.find_one(Features.LOGIN_METHOD_BUTTON, threshold=0.6)
+            if button:
+                self.log_info("找到'输账号登录'按钮(特征)，点击...")
+                self.click(button, after_sleep=1)
+                return True
+        except ValueError:
+            pass
+
+        # 方法2：OCR 文字识别点击（备选）
+        texts = self._get_ocr_texts()
+        if texts:
+            boxes = self.find_boxes(texts, match=re.compile(r"输账号登录"))
+            if boxes:
+                box = boxes[0]
+                click_x = (box.x + box.width / 2) / self.width
+                click_y = (box.y + box.height / 2) / self.height
+                self.log_info(f"找到'输账号登录'按钮(OCR)，点击 ({click_x:.3f}, {click_y:.3f})")
+                self.click_relative(click_x, click_y, after_sleep=1)
+                return True
+
+        self.logger.warning(f"[{self.name}] 未找到'输账号登录'按钮")
         return False
 
     def _check_loading_screen(self):
