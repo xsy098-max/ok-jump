@@ -135,7 +135,7 @@ config = {
         ['src.task.CITestTask', 'CITestTask'],  # CI自动化测试任务（置顶）
         ['src.task.TestAllInOneTask', 'TestAllInOneTask'],  # 测试一条龙任务
         ['src.task.AutoLoginTask', 'AutoLoginTask'],
-        ['src.task.AutoLoginTaskUnity', 'AutoLoginTask-Unity'],
+        ['src.task.AutoLoginTaskUnity', 'AutoLoginTaskUnity'],
         ['src.task.AutoTutorialTask', 'AutoTutorialTask'],
         ['src.task.AutoMatchTask', 'AutoMatchTask'],
         ['src.task.DailyTask', 'DailyTask'],
