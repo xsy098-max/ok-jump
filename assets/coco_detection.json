@@ -143,6 +143,12 @@
             "file_name": "images/new/new_hero.png",
             "height": 74,
             "width": 220
+        },
+        {
+            "id": 24,
+            "file_name": "images/login/ex01.png",
+            "height": 60,
+            "width": 363
         }
     ],
     "categories": [
@@ -355,6 +361,11 @@
             "id": 308,
             "name": "new_hero",
             "supercategory": "tutorial_ui"
+        },
+        {
+            "id": 123,
+            "name": "login_method_button",
+            "supercategory": "login_ui"
         }
     ],
     "annotations": [
@@ -580,6 +591,14 @@
             "category_id": 308,
             "bbox": [0, 0, 220, 74],
             "area": 16280.0,
+            "iscrowd": 0
+        },
+        {
+            "id": 28,
+            "image_id": 24,
+            "category_id": 123,
+            "bbox": [0, 0, 363, 60],
+            "area": 21780.0,
             "iscrowd": 0
         }
     ]

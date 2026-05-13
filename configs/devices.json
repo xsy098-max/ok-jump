@@ -1,7 +1,7 @@
 {
-    "preferred": "leidian0",
+    "preferred": "unity",
     "pc_full_path": "D:\\Python-wuwa\\Internal_1\\漫画群星：大集结.exe",
-    "capture": "adb",
+    "capture": "windows",
     "selected_exe": "",
     "selected_hwnd": 0
 }

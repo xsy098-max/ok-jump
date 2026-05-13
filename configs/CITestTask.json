@@ -3,7 +3,10 @@
     "Jenkins Job名称": "P9_XProject_Android_BrawlStars_Release",
     "模拟器路径": "E:\\leidian\\LDPlayer9\\dnplayer.exe",
     "APK下载目录": "E:\\packages",
-    "游戏包名": ["com.dgames.g65002007.google", "com.fivegames.g65002007.google"],
+    "游戏包名": [
+        "com.dgames.g65002007.google",
+        "com.fivegames.g65002007.google"
+    ],
     "ADB端口": 5554,
     "模拟器实例索引": 0,
     "企业微信Webhook": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=73728a93-47f0-432d-ac1d-21ff4ab40a5e",

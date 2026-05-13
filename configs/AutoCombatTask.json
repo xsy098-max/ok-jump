@@ -1,6 +1,6 @@
 {
-    "_enabled": true,
-    "测试模式": false,
+    "_enabled": false,
+    "测试模式": true,
     "详细日志": true,
     "自动普攻": true,
     "自动技能1": true,

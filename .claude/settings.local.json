@@ -4,7 +4,28 @@
       "Bash(python3 -c ':*)",
       "Bash(python -c ':*)",
       "Bash(git add:*)",
-      "Bash(git commit -m ':*)"
+      "Bash(git commit -m ':*)",
+      "Bash(ls \"E:/Program/Client-Jump/.claude/skills/\" 2>/dev/null)",
+      "Read(//e/Program/Client-Jump/.claude/skills/**)",
+      "Bash(ls \"E:/Program/Tools/UnityMultRun/\" 2>/dev/null)",
+      "Read(//e/Program/Tools/UnityMultRun/**)",
+      "Read(//e/Program/Client-Jump/Assets/Game/**)",
+      "Read(//e/Program/Client-Jump/Packages/Knight-Lib/**)",
+      "Read(//e/Program/Client-Jump/Packages/com.unity-ai-custom/Editor/Commands/**)",
+      "Read(//e/Program/Client-Jump/Packages/com.unity-ai-custom/Editor/Commands/Battle/**)",
+      "Bash(ls \"E:/Program/Client-Jump/\")",
+      "Read(//e/Program/Client-Jump/**)",
+      "Bash(ls \"E:/Program/Client-Jump/Assets/Game.Battle/\" 2>/dev/null | head -50)",
+      "Read(//e/Program/Client-Jump/Assets/Game.Battle/**)",
+      "Bash(ls \"E:/Program/Client-Jump/Assets/Game.Hotfix/\" 2>/dev/null | head -50)",
+      "Read(//e/Program/Client-Jump/Assets/Game.Hotfix/**)",
+      "Bash(pip show *)",
+      "Bash(python -c \"import ok; import inspect; print\\(inspect.getfile\\(ok.TriggerTask\\)\\)\")",
+      "Bash(ls -la /e/Program/)",
+      "Read(//e/Program//**)",
+      "Bash(ls -la /e/Program/Server-Jump/ 2>/dev/null | head -30)",
+      "Read(//e/Program/Server-Jump//**)",
+      "Bash(python -c ' *)"
     ]
   }
 }
