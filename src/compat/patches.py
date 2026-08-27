@@ -469,10 +469,15 @@ def patch_device_manager_for_unity():
             sock.close()
 
             if result == 0:
+                # device 字段必须是框架已知的 "windows":
+                # StartTab 按该字段选类型标签(windows->PC/emulator->模拟器/
+                # 其余一律兜底为 "Android"),自定义值会显示成误导性的"安卓版";
+                # 启动路径已被本模块 patched_do_start 提前接管,不会走
+                # windows 设备的游戏启动分支
                 self.device_dict['unity'] = {
                     "address": f"{UNITY_HOST}:{UNITY_PORT}",
                     "imei": "unity",
-                    "device": "unity",
+                    "device": "windows",
                     "model": "Unity Editor",
                     "nick": "Unity Editor",
                     "width": 1920,

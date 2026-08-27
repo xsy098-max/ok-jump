@@ -187,10 +187,13 @@ class TestUnityDeviceInjection:
 
         entry = dm.device_dict.get('unity')
         assert entry is not None
-        assert entry['device'] == 'unity'
+        # device 字段必须用框架已知的 "windows":StartTab 按它选类型标签,
+        # 自定义值会落入 Android 兜底分支,把 Unity Editor 显示成"安卓版"
+        assert entry['device'] == 'windows'
         assert entry['connected'] is True
         assert entry['capture'] == 'windows'
         assert entry['imei'] == 'unity'
+        assert entry['nick'] == 'Unity Editor'
 
 
 # ---------------------------------------------------------------------------
