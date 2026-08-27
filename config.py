@@ -125,9 +125,6 @@ config = {
         'min_height': 600,
     },
     
-    'log_file': 'logs/ok-jump.log',
-    'error_log_file': 'logs/ok-jump_error.log',
-    
     'screenshots_folder': "screenshots",
     
     'onetime_tasks': [
