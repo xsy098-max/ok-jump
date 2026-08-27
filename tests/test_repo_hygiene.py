@@ -47,8 +47,10 @@ class TestRuntimeCompleteness:
                 f'自定义页签 {class_name} 的模块文件不存在'
 
     def test_packaging_files_exist(self):
-        for f in ['main.py', 'main_debug.py', 'config.py', 'requirements.txt',
-                  'pyappify.yml', 'run_tests.ps1', 'AGENTS.md']:
+        for f in ['main.py', 'main_web.py', 'main_debug.py', 'config.py',
+                  'requirements.txt', 'pyappify.yml', 'run_tests.ps1',
+                  'AGENTS.md', 'i18n/zh_CN/LC_MESSAGES/ok.mo',
+                  'scripts/gen_i18n_mo.py']:
             assert os.path.isfile(f), f'打包/开发必需文件缺失: {f}'
 
     def test_assets_exist(self):

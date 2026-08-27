@@ -1,0 +1,50 @@
+# ok-jump 界面中文翻译(ok-script 2.x gettext 目录)
+# 编辑本文件后运行:  python scripts/gen_i18n_mo.py
+# 规则: 任务 self.name 为英文类名,msgid 用原名;新增任务须在此登记
+msgid ""
+msgstr ""
+"Project-Id-Version: ok-jump 1.8.0\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: zh_CN\n"
+
+#: src/task/CITestTask.py
+msgid "CITestTask"
+msgstr "CI自动化测试"
+
+#: src/task/TestAllInOneTask.py
+msgid "TestAllInOneTask"
+msgstr "测试一条龙"
+
+#: src/task/AutoLoginTask.py
+msgid "AutoLoginTask"
+msgstr "自动登录"
+
+#: src/task/AutoLoginTaskUnity.py
+msgid "AutoLoginTask-Unity"
+msgstr "Unity自动登录"
+
+#: src/task/AutoTutorialTask.py
+msgid "AutoTutorialTask"
+msgstr "自动新手教程"
+
+#: src/task/AutoMatchTask.py
+msgid "AutoMatchTask"
+msgstr "自动匹配"
+
+#: src/task/DailyTask.py
+msgid "DailyTask"
+msgstr "日常任务"
+
+#: src/task/AutoCombatTask.py
+msgid "AutoCombatTask"
+msgstr "自动战斗"
+
+#: src/task/AutoCombatTaskUnity.py
+msgid "AutoCombatTaskUnity"
+msgstr "Unity自动战斗"
+
+#: src/task/MainWindowTask.py
+msgid "MainWindowTask"
+msgstr "主窗口"
