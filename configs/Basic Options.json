@@ -7,7 +7,6 @@
     "Use DirectML": "Yes",
     "Trigger Interval": 1,
     "Start/Stop": "F9",
-    "Kill Launcher after Start": false,
-    "Launch with DX11": false,
-    "Windows Capture": "BitBlt"
+    "Kill Launcher After Start": true,
+    "Launch with DX11": false
 }
