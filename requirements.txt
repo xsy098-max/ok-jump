@@ -1,4 +1,7 @@
-ok-script>=1.0.0
+# ok-jump 运行依赖
+# 框架升级流程:改下方 ok-script 版本 -> pip install -> 跑 .\run_tests.ps1 全绿后提交
+# 注意:ok-script[ocr] extra 提供 onnxocr-ppocrv5,勿再单独安装旧版 onnxocr 包
+ok-script[ocr,qt]==2.0.5
 PySide6-Essentials>=6.7.0
 PySide6-Fluent-Widgets>=1.5.5
 requests>=2.31.0
@@ -13,4 +16,4 @@ onnxruntime>=1.16.0
 onnxruntime-directml>=1.16.0
 pyperclip>=1.8.2
 opencc>=1.1.0
-onnxocr>=2025.5
+openvino>=2024.0

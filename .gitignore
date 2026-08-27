@@ -6,10 +6,18 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 
-# IDE
+# IDE / AI 工具本地数据(不入库,CNB 镜像随之保持干净)
 .idea/
 .vscode/
 .trae/
+.qoder/
+.qoderignore
+.claude/
+.learnings/
+.zcode/
+
+# Office 临时锁文件
+~$*
 
 # OS
 Thumbs.db
@@ -20,9 +28,12 @@ test_results/
 
 # Env
 .env
+.venv/
+.venv-baseline/
 
 # Logs
 logs/
+cache/
 
 # PyAppify
 data/

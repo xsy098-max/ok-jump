@@ -689,9 +689,11 @@ class StateDetector:
     def _get_unity_connection(self):
         """获取 Unity 连接实例"""
         try:
-            if og and hasattr(og, 'my_app') and hasattr(og.my_app, '_unity_connection'):
-                conn = og.my_app._unity_connection
-                if conn and conn.is_connected():
+            from src.utils.UnityConnection import UnityConnection
+            if og and hasattr(og, 'my_app'):
+                # isinstance 校验:防止 mock 对象被误认为 Unity 连接
+                conn = getattr(og.my_app, '_unity_connection', None)
+                if isinstance(conn, UnityConnection) and conn.is_connected():
                     return conn
         except Exception:
             pass

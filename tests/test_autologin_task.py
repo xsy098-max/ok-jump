@@ -9,6 +9,19 @@ from src.task.AutoLoginTask import AutoLoginInputException, AutoLoginTask
 def build_task():
     task = AutoLoginTask.__new__(AutoLoginTask)
     task.config = None
+    task.name = "AutoLoginTask"
+    # __new__ 跳过了 __init__/mixin 初始化,手动补齐被测方法访问的属性
+    task._adb_cache = None
+    task._adb_cache_ts = 0
+    task._checkbox_detector = None
+    task._init_checkbox_detector = MagicMock()
+    # 框架 BaseTask.send_key 等方法经由 self._executor 分发
+    task._executor = MagicMock()
+    task._executor.send_key.return_value = True
+    # 框架 info_set 写 self.info 字典(GUI 信息面板)
+    task.info = {}
+    task.send_key_down = MagicMock()
+    task.send_key_up = MagicMock()
     task.default_config = {
         '输入账号': True,
         '账号': 'demo_user_01',
@@ -218,18 +231,23 @@ class TestLoginScreen0:
         task.click.assert_called_once()
     
     def test_handle_login_screen_0_checkbox_not_checked_click_success(self):
+        from types import SimpleNamespace
         task = build_task()
-        task.find_one = MagicMock(side_effect=[
-            None,
-            (150, 75),
-            (500, 300),
-        ])
+        # YOLO 确认检测返回"未勾选"状态及勾选框位置
+        box = SimpleNamespace(x=100, y=50, width=40, height=40)
+        task._detect_checkbox_with_confirmation = MagicMock(
+            return_value={'state': 'unchecked', 'box': box})
+        task.find_one = MagicMock(return_value=(500, 300))
+        task.click_relative = MagicMock(return_value=True)
         task.click = MagicMock(return_value=True)
-        
+
         result = task._handle_login_screen_0()
-        
+
         assert result is True
-        assert task.click.call_count == 2
+        # 未勾选:按勾选框中心相对坐标点击 ((100+20)/1920, (50+20)/1080)
+        task.click_relative.assert_called_once_with(120 / 1920, 70 / 1080, after_sleep=0.3)
+        # 进入游戏按钮:特征匹配成功后绝对点击
+        task.click.assert_called_once()
 
 
 class TestLoginScreen2:
@@ -311,7 +329,8 @@ def test_input_account_visible_and_enabled_success():
 
     assert result is True
     task.click_relative.assert_called_once()
-    task.send_key.assert_any_call('ctrl', 'a')
+    task.send_key.assert_any_call('a')
+    task.send_key_down.assert_any_call('ctrl')
     task.send_key.assert_any_call('backspace')
     task.send_key.assert_any_call('tab')
 
@@ -330,7 +349,8 @@ def test_input_account_keyboard_input_every_attempt():
     result = task._input_account(account)
 
     assert result is True
-    task.send_key.assert_any_call('ctrl', 'a')
+    task.send_key.assert_any_call('a')
+    task.send_key_down.assert_any_call('ctrl')
     task.send_key.assert_any_call('backspace')
     task.send_key.assert_any_call('tab')
     
@@ -372,7 +392,8 @@ def test_login_screen_1_respects_gui_config_for_input():
     assert result is True
     task._input_account.assert_called_once_with('gui_account_88')
     task.click.assert_not_called()
-    task._click_button_by_ocr.assert_not_called()
+    # 账号输入完成后生产逻辑会继续尝试点击"进入游戏"(特征未命中时走 OCR 兜底)
+    task._click_button_by_ocr.assert_called_once()
 
 
 def test_input_account_mismatch_retries_and_raises_exception():

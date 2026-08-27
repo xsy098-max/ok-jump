@@ -1,0 +1,29 @@
+[project]
+name = "ok-jump"
+version = "1.8.0"
+description = "漫画群星：大集结自动化工具(基于 ok-script 2.x)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "xsy098-max" }]
+# 运行依赖以 requirements.txt 为准(打包/引导均读取该文件);
+# 此处仅声明直接依赖用于元数据,版本约束保持同步。
+dependencies = [
+    "ok-script[ocr,qt]>=2.0.5,<3",
+    "opencv-python>=4.9.0.80",
+    "numpy>=1.26.4",
+    "adbutils>=2.2.1",
+    "pywin32>=306",
+    "psutil>=6.0.0",
+    "pydirectinput==1.0.4",
+    "opencc>=1.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

@@ -61,6 +61,9 @@ def build_mock_task():
     task.find_boxes = MagicMock(return_value=[])
     task._should_exit = MagicMock(return_value=False)
     task._exit_requested = False
+    # 卡住/抖动检测依赖真实的列表状态(MagicMock 的 len() 恒为 0)
+    task._position_history = []
+    task._position_history_max = 30
     task.executor = MagicMock()
     task.executor.get_task = MagicMock(return_value=None)
     return task
@@ -88,6 +91,9 @@ def build_mock_combat_task():
     task.next_frame = MagicMock()
     task._should_exit = MagicMock(return_value=False)
     task._exit_requested = False
+    # 卡住/抖动检测依赖真实的列表状态(MagicMock 的 len() 恒为 0)
+    task._position_history = []
+    task._position_history_max = 30
 
     # 控制器
     task.state_detector = MagicMock(spec=StateDetector)
@@ -401,11 +407,10 @@ class TestCalculateMovementKeys:
 class TestStuckAndJitterDetection:
     """卡住/抖动检测测试"""
 
-    def test_stuck_detected_after_4_same_positions(self):
-        """连续 4 个相同位置检测到卡住"""
+    def test_stuck_detected_after_8_same_positions(self):
+        """连续 8 个相同位置检测到卡住(STUCK_COUNT=8)"""
         task = build_mock_combat_task()
-        self_pos = make_detection(500, 500, 80, 120, CombatLabel.SELF)
-        for _ in range(4):
+        for _ in range(8):
             task._record_position(500, 500)
         assert task._detect_stuck() is True
 
@@ -421,7 +426,7 @@ class TestStuckAndJitterDetection:
     def test_stuck_clears_history_after_detection(self):
         """卡住检测后手动清空历史"""
         task = build_mock_combat_task()
-        for _ in range(4):
+        for _ in range(8):
             task._record_position(500, 500)
         assert task._detect_stuck() is True
         task._position_history.clear()
@@ -430,8 +435,8 @@ class TestStuckAndJitterDetection:
     def test_jitter_detected_with_abab_pattern(self):
         """A-B-A-B 模式检测到抖动"""
         task = build_mock_combat_task()
-        # A-B-A-B-A-B pattern
-        positions = [(100, 100), (300, 100), (100, 100), (300, 100), (100, 100), (300, 100)]
+        # A-B-A-B 模式,抖动检测需要至少 8 个历史位置
+        positions = [(100, 100), (300, 100)] * 4
         for x, y in positions:
             task._record_position(x, y)
         assert task._detect_jitter() is True
@@ -451,8 +456,8 @@ class TestStuckAndJitterDetection:
         task.movement_ctrl._press_movement_keys_for_duration = MagicMock()
         # center_x = x + w//2, center_y = y + h//2
         self_pos = make_detection(500, 500, 80, 120, CombatLabel.SELF)  # center=(540, 560)
-        # 记录与 self_pos 中心一致的位置
-        for _ in range(3):
+        # 记录与 self_pos 中心一致的位置(内部再补 1 个,凑满 8 个采样)
+        for _ in range(7):
             task._record_position(self_pos.center_x, self_pos.center_y)
         result = task._handle_stuck_or_jitter(self_pos)
         assert result is True

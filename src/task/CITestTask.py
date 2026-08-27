@@ -254,6 +254,8 @@ class CITestTask(BaseTask):
             self.logger.info("=" * 60)
             self.logger.info(f"CI自动化测试任务完成: {'成功' if success else '失败'}")
             self.logger.info("=" * 60)
+            # 桌面通知:定时执行时无人盯屏,本地即时可见结果
+            self._desktop_notify(f"CI自动化测试{'成功' if success else '失败'}", error=not success)
 
             return success
 
@@ -262,6 +264,7 @@ class CITestTask(BaseTask):
             # 保存截图
             self._save_final_screenshot()
             self._handle_continuous_failure(str(e))
+            self._desktop_notify(f"CI连续失败中断: {e}", error=True)
             return False
 
         except Exception as e:
@@ -269,7 +272,19 @@ class CITestTask(BaseTask):
             # 保存截图
             self._save_final_screenshot()
             self._handle_exception(e)
+            self._desktop_notify(f"CI测试任务异常: {e}", error=True)
             return False
+
+    def _desktop_notify(self, message, error=False):
+        """发送本地桌面通知(不依赖企业微信 webhook 配置)"""
+        try:
+            from ok.core.notifications import alert_error, alert_info
+            if error:
+                alert_error(message, tray=True)
+            else:
+                alert_info(message, tray=True)
+        except Exception as e:
+            self.logger.debug(f"桌面通知发送失败: {e}")
 
     def _load_config(self):
         """加载CI配置"""

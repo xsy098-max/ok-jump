@@ -720,6 +720,7 @@ class TestIntegration:
             TutorialState.COMBAT_TRIGGER,
             # PHASE1_END_DETECTION 在 COMBAT_TRIGGER 内部并行运行
             TutorialState.PHASE1_END,
+            TutorialState.PHASE2_3V3,
             TutorialState.COMPLETED,
         ]
         
@@ -819,8 +820,8 @@ class TestSkillController:
         skill_ctrl.update_distance(300.0)
         assert skill_ctrl.is_in_skill_range() is False
         
-        # 边界值
-        skill_ctrl.update_distance(250.0)
+        # 边界值(skill_range_max = 225,含边界)
+        skill_ctrl.update_distance(225.0)
         assert skill_ctrl.is_in_skill_range() is True
         
         skill_ctrl.update_distance(0.0)

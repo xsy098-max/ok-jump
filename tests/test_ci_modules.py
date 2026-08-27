@@ -364,10 +364,14 @@ class TestIntegration(unittest.TestCase):
         self.assertIn('ADB端口', config, "配置文件缺少ADB端口")
 
     def test_version_updated(self):
-        """测试版本号已更新"""
+        """版本号必须是语义化版本 X.Y.Z(发布打 tag 依赖此格式)"""
+        import re as _re
         from config import config
-    
-        self.assertEqual(config['version'], '1.4.10', "版本号应为1.4.10")
+
+        version = config['version']
+        self.assertRegex(
+            version, r'^\d+\.\d+\.\d+$',
+            f"版本号 '{version}' 应为 X.Y.Z 格式")
 
 
 class TestCITestTask(unittest.TestCase):

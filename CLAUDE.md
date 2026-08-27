@@ -38,3 +38,16 @@
 | `src/combat/` | 战斗系统（状态检测、技能控制、距离计算） |
 | `src/tutorial/` | 新手教程状态机 |
 | `src/utils/` | 工具类（截图、后台输入、分辨率适配、繁简转换） |
+| `src/compat/` | ok-script 框架补丁与启动编排（升级框架前必读 `patches.py` 头部说明） |
+
+## 测试
+
+一键运行全部测试（自动探测 `.venv`，无需 activation）：
+
+```powershell
+.\run_tests.ps1
+```
+
+- 测试不依赖真实游戏/模拟器，全部 mock；新增功能必须带测试
+- `tests/test_framework_contract.py` 守护框架契约：模块路径迁移、已退役补丁的前提变化都会立刻报警
+- CI（`.github/workflows/test.yml`）在 push/PR 时自动跑全量测试
