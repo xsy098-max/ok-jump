@@ -208,3 +208,51 @@ class TestFrameworkGuard:
             patches.enforce_ok_script_compat()
 
         assert '关键模块缺失' in str(exc_info.value)
+
+
+class TestUpdateCardSourceMode:
+    """源码模式下应用内更新检查应静默降级而非刷 ERROR"""
+
+    def _make_card(self):
+        card = MagicMock()
+        card._busy = False
+        return card
+
+    def test_skips_check_when_not_packaged(self, monkeypatch):
+        import pyappify
+        from ok.ui.qt.about.UpdateCard import UpdateCard
+        from src.compat.patches import patch_update_card_source_mode
+
+        monkeypatch.setattr(pyappify, 'app_version', None)
+        monkeypatch.setattr(pyappify, 'pyappify_version', None)
+        patch_update_card_source_mode()
+
+        original = MagicMock()
+        UpdateCard.check_for_updates.__ok_jump_orig__ = original
+        card = self._make_card()
+
+        UpdateCard.check_for_updates(card)
+
+        original.assert_not_called()          # 不发后台检查线程
+        card._set_status.assert_called_once() # 卡片给出静态说明
+
+    def test_delegates_when_packaged(self, monkeypatch):
+        import pyappify
+        from ok.ui.qt.about.UpdateCard import UpdateCard
+        from src.compat.patches import patch_update_card_source_mode
+
+        monkeypatch.setattr(pyappify, 'app_version', '1.8.0')
+        monkeypatch.setattr(pyappify, 'pyappify_version', '1.0.13')
+        patch_update_card_source_mode()
+
+        calls = []
+
+        def fake_original(self):
+            calls.append(1)
+            return 'delegated'
+
+        UpdateCard.check_for_updates.__ok_jump_orig__ = fake_original
+
+        result = UpdateCard.check_for_updates(self._make_card())
+
+        assert result == 'delegated' and len(calls) == 1

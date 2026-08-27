@@ -703,6 +703,47 @@ def enforce_ok_script_compat():
 
 
 # ---------------------------------------------------------------------------
+# 更新检查降级(源码模式)
+# ---------------------------------------------------------------------------
+
+def patch_update_card_source_mode():
+    """
+    Patch UpdateCard.check_for_updates:未打包环境跳过自动检查。
+
+    应用内更新依赖 pyappify 打包引导器注入的版本号;直接以源码/venv 运行时
+    pyappify_version 为 None,定时检查必然失败并在日志刷 ERROR 堆栈、
+    更新卡片挂错误文案。此处改为静态提示,打包版不受影响。
+    """
+    try:
+        from ok.ui.qt.about.UpdateCard import UpdateCard
+    except ImportError:
+        logger.warning('UpdateCard not found, source-mode update patch skipped')
+        return
+
+    if getattr(UpdateCard.check_for_updates, '__ok_jump_patch__', False):
+        return
+
+    def patched_check_for_updates(self):
+        import pyappify
+        if getattr(pyappify, 'app_version', None) and getattr(pyappify, 'pyappify_version', None):
+            return patched_check_for_updates.__ok_jump_orig__(self)
+
+        # 源码模式:不发检查请求,避免无意义的失败线程与 ERROR 刷屏
+        logger.debug('Development mode: in-app update check disabled '
+                     '(available only in packaged builds)')
+        try:
+            self._set_status(self.tr(
+                "Updates are available only in the packaged version."))
+        except Exception:
+            pass
+
+    patched_check_for_updates.__ok_jump_patch__ = True
+    patched_check_for_updates.__ok_jump_orig__ = UpdateCard.check_for_updates
+    UpdateCard.check_for_updates = patched_check_for_updates
+    logger.info('UpdateCard patched: source-mode update checks disabled')
+
+
+# ---------------------------------------------------------------------------
 # 统一入口
 # ---------------------------------------------------------------------------
 
@@ -719,3 +760,4 @@ def apply_post_init_patches(export_logs_impl):
     patch_ocr_negative_box_logging()
     patch_capture_process_not_found_logging()
     patch_export_logs(export_logs_impl)
+    patch_update_card_source_mode()
