@@ -26,6 +26,8 @@ class AutoCombatTaskUnity(TriggerTask):
         TriggerTask.__init__(self, *args, **kwargs)
         self.name = "AutoCombatTaskUnity"
         self.description = "Unity 工程连接 - AI 自动战斗"
+        # TCP ping 轮询间隔(秒):2Hz 足够感知战斗状态
+        self.trigger_interval = 0.5
 
         self.default_config = {
             '使用游戏内置AI': True,

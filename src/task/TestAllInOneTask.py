@@ -98,7 +98,7 @@ class TestAllInOneTask(BaseJumpTask):
                 else:
                     # 默认过渡等待
                     self.logger.info(f"\n⏳ 等待 {default_wait} 秒后继续下一个任务...")
-                    time.sleep(default_wait)
+                    self.sleep(default_wait)
             
             try:
                 self.logger.info(f"\n▶ 开始执行: {task_name}")
@@ -160,7 +160,7 @@ class TestAllInOneTask(BaseJumpTask):
         
         # 等待界面稳定
         self.logger.info(f"⏳ 等待 {wait_time} 秒让界面稳定...")
-        time.sleep(wait_time)
+        self.sleep(wait_time)
         
         # 验证界面状态
         if verify_screen:
@@ -217,6 +217,6 @@ class TestAllInOneTask(BaseJumpTask):
                 except Exception as e:
                     self.logger.debug(f"OCR检测异常: {e}")
             
-            time.sleep(0.5)
+            self.sleep(0.5)
         
         return False

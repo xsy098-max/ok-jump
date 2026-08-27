@@ -432,7 +432,7 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
                 result = self.find_text_fuzzy(texts, target_text)
                 if result:
                     return result
-            time.sleep(ocr_interval)
+            self.sleep(ocr_interval)
 
         return None
 
@@ -495,6 +495,10 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
         """
         等待条件满足
 
+        委托框架 2.x 的 wait_condition 实现(参考 ok-wuthering-waves 用法):
+        - 睡眠经由 executor,响应暂停/停止
+        - 保持 ok-jump 的 10 秒默认超时与立即返回语义(框架默认需稳定 1s)
+
         Args:
             condition: 条件函数，返回非 None 值表示满足
             time_out: 超时时间（秒）
@@ -505,23 +509,14 @@ class BaseJumpTask(BaseTask, JumpTaskMixin):
         Returns:
             condition 的返回值，或 None（超时时）
         """
-        start_time = time.time()
-
-        if pre_action:
-            pre_action()
-
-        while time.time() - start_time < time_out:
-            self.next_frame()
-            result = condition()
-            if result:
-                if post_action:
-                    post_action()
-                return result
-            time.sleep(0.1)
-
-        if raise_if_not_found:
-            raise Exception(f"等待条件超时")
-        return None
+        try:
+            return self.executor.wait_condition(
+                condition, time_out, pre_action, post_action,
+                settle_time=0, raise_if_not_found=raise_if_not_found)
+        except Exception:
+            if raise_if_not_found:
+                raise
+            return None
 
     def ensure_main(self, esc=True, time_out=30):
         """

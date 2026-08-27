@@ -144,6 +144,8 @@ class AutoCombatTask(BaseJumpTriggerTask):
         super().__init__(*args, **kwargs)
         self.name = "AutoCombatTask"
         self.description = "自动战斗 - 智能战斗辅助"
+        # 触发轮询间隔(秒):限制 run() 重入频率,降低空闲 CPU 占用
+        self.trigger_interval = 0.2
 
         # 配置选项（技能开关和间隔）
         # 使用 update 方法添加配置，保留父类 TriggerTask 设置的 _enabled 键

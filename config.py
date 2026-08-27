@@ -47,7 +47,6 @@ basic_config_option = ConfigOption(
         '自动调整游戏窗口大小': False,
         '游戏退出时关闭程序': False,
         '游戏文本语言': '简体中文',
-        '触发间隔': 1,
         '启动/停止快捷键': 'F9',
     },
     config_type={
@@ -59,7 +58,6 @@ basic_config_option = ConfigOption(
         '最小化时伪最小化': '窗口最小化时自动移到屏幕外，支持后台截图',
         '后台时静音游戏': '游戏窗口在后台时自动静音',
         '游戏文本语言': '游戏内显示的语言，OCR识别将自动转换匹配关键词',
-        '触发间隔': '触发任务之间的延迟(毫秒)，增加延迟可降低CPU/GPU使用率',
         '启动/停止快捷键': '启动/停止快捷键',
     },
     icon=FluentIcon.SETTING
@@ -91,6 +89,8 @@ config = {
         'default_threshold': 0.8,
     },
     
+    'start_timeout': 120,
+
     'windows': {
         'title': '漫画群星：大集结',
         'exe': '漫画群星：大集结.exe',

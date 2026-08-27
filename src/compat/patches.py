@@ -298,6 +298,20 @@ def patch_start_controller():
             logger.info('Unity connection active, skipping device error check')
             return None
 
+        # 后台模式守卫:skip_pos_check 开启且窗口在屏幕外(伪最小化)时,
+        # 直接放行而不调用原始检查——2.0.5 的 check_device_error 会把
+        # 位置无效的窗口自动搬回屏幕中央(resize_window),破坏伪最小化后台模式
+        if (og.config.get('windows') or {}).get('skip_pos_check', False):
+            try:
+                dm = getattr(og, 'device_manager', None)
+                capture_method = getattr(dm, 'capture_method', None)
+                hwnd_window = getattr(capture_method, 'hwnd_window', None)
+                if hwnd_window is not None and not getattr(hwnd_window, 'pos_valid', True):
+                    logger.info('后台模式: 窗口在屏幕外(伪最小化), 跳过设备检查与自动回正')
+                    return None
+            except Exception:
+                pass
+
         result = patched_check_device_error.__ok_jump_orig__(self)
 
         # 后台模式:允许最小化/屏幕外窗口

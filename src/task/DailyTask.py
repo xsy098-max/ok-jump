@@ -55,14 +55,14 @@ class DailyTask(BaseJumpTask):
                 self.logger.info(f"点击日常任务 {i + 1}")
                 
                 import time
-                time.sleep(1)
+                self.sleep(1)
                 
                 go_button = self.find_feature('quest_go')
                 if go_button:
                     self.click(go_button[0], go_button[1])
                     self.logger.info("执行任务中...")
                     quest_count += 1
-                    time.sleep(2)
+                    self.sleep(2)
         
         self.logger.info(f"完成 {quest_count} 个日常任务")
         return quest_count > 0
@@ -76,7 +76,7 @@ class DailyTask(BaseJumpTask):
             self.logger.info("点击任务标签")
             
             import time
-            time.sleep(1)
+            self.sleep(1)
             return True
         
         return False
@@ -94,7 +94,7 @@ class DailyTask(BaseJumpTask):
                 rewards_collected += 1
                 
                 import time
-                time.sleep(0.5)
+                self.sleep(0.5)
             else:
                 break
         

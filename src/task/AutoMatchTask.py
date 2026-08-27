@@ -56,7 +56,7 @@ class AutoMatchTask(BaseJumpTask):
         for _ in range(max_attempts):
             if self.in_lobby():
                 return True
-            time.sleep(0.5)
+            self.sleep(0.5)
         
         return False
     
@@ -90,7 +90,7 @@ class AutoMatchTask(BaseJumpTask):
                 self.logger.info("已接受匹配 (特征匹配)")
                 return True
             
-            time.sleep(0.5)
+            self.sleep(0.5)
         
         self.logger.warning("匹配超时")
         return False
