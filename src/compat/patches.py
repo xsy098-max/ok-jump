@@ -651,11 +651,59 @@ def patch_export_logs(export_logs_impl):
 
 
 # ---------------------------------------------------------------------------
+# 框架版本守卫
+# ---------------------------------------------------------------------------
+
+def enforce_ok_script_compat():
+    """
+    启动时校验 ok-script 为 2.x(>=2.0.5)。
+
+    本项目补丁层与任务代码按 ok-script 2.x 编写(ok.core.* 路径)。
+    常见踩坑:用系统 Python 启动(其残留 1.x 版本,无 ok/core),
+    得到晦涩的 ModuleNotFoundError;此守卫换成可操作的中文指引。
+    """
+    import importlib.metadata
+
+    try:
+        version = importlib.metadata.version('ok-script')
+    except Exception:
+        version = None
+
+    def _fail(reason):
+        raise RuntimeError(
+            f'ok-script 环境不满足要求({reason})。\n'
+            f'当前解释器: {__import__("sys").executable}\n'
+            f'检测到的 ok-script 版本: {version or "未安装"}\n'
+            f'修复方法(二选一):\n'
+            f'  1. 用项目自带环境启动:  .\\.venv\\Scripts\\python.exe main.py\n'
+            f'     (GUI 无控制台: .\\.venv\\Scripts\\pythonw.exe main.py)\n'
+            f'  2. 给当前解释器装齐依赖:\n'
+            f'     python -m pip install "ok-script[ocr,qt]==2.0.5" openvino opencc'
+        )
+
+    if not version:
+        _fail('未检测到 ok-script')
+    try:
+        parts = tuple(int(x) for x in version.split('.')[:3])
+    except ValueError:
+        _fail(f'无法解析版本号 {version}')
+    if parts < (2, 0, 5):
+        _fail(f'需要 >= 2.0.5,实际 {version}(旧版没有 ok/core 目录)')
+    # 双保险:pip 元数据与真实模块结构不一致时依然拦截
+    try:
+        import ok.core.start_controller  # noqa: F401
+        from ok.task.task import TriggerTask  # noqa: F401
+    except ImportError as e:
+        _fail(f'关键模块缺失: {e}')
+
+
+# ---------------------------------------------------------------------------
 # 统一入口
 # ---------------------------------------------------------------------------
 
 def apply_pre_init_patches():
     """OK(config) 之前应用的补丁"""
+    enforce_ok_script_compat()
     patch_start_controller()
     patch_adb_connect_error_handling()
     patch_device_manager_for_unity()

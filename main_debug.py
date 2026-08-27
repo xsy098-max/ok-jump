@@ -4,6 +4,9 @@ from config import config
 from ok import OK
 
 if __name__ == '__main__':
+    from src.compat.patches import enforce_ok_script_compat
+    enforce_ok_script_compat()
+
     config['debug'] = True
     config['use_gui'] = False
     

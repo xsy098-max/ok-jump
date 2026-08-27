@@ -169,3 +169,42 @@ class TestNoRawSleepInSimpleTasks:
         src = open(path, encoding='utf-8').read()
         assert 'time.sleep(' not in src, \
             f'{path} 存在不响应暂停的裸 time.sleep,应使用 self.sleep'
+
+
+class TestFrameworkGuard:
+    """运行时版本守卫:用错解释器时给出可操作的指引而非堆栈"""
+
+    def test_passes_on_healthy_env(self):
+        from src.compat.patches import enforce_ok_script_compat
+        enforce_ok_script_compat()  # 当前 venv 为 2.0.5,不应抛异常
+
+    def test_fails_with_actionable_message(self, monkeypatch):
+        import sys
+        from src.compat import patches
+
+        fake_md = MagicMock()
+        fake_md.version.return_value = '1.0.68'
+        monkeypatch.setattr('importlib.metadata.version', fake_md.version)
+
+        with pytest.raises(RuntimeError) as exc_info:
+            patches.enforce_ok_script_compat()
+
+        msg = str(exc_info.value)
+        assert '1.0.68' in msg                       # 暴露实际检测到的版本
+        assert '.venv' in msg                        # 给出正确启动方式
+        assert 'ok-script[ocr,qt]==2.0.5' in msg     # 给出安装命令
+        assert sys.executable in msg                 # 指明当前用错了哪个解释器
+
+    def test_fails_when_core_module_missing(self, monkeypatch):
+        from src.compat import patches
+
+        fake_md = MagicMock()
+        fake_md.version.return_value = '2.0.5'
+        monkeypatch.setattr('importlib.metadata.version', fake_md.version)
+        monkeypatch.setitem(__import__('sys').modules,
+                            'ok.core.start_controller', None)  # 强制导入失败
+
+        with pytest.raises(RuntimeError) as exc_info:
+            patches.enforce_ok_script_compat()
+
+        assert '关键模块缺失' in str(exc_info.value)
