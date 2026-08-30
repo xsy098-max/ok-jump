@@ -12,6 +12,7 @@ src/compat 兼容层测试:验证每个框架补丁在 ok-script 2.x 上的应�
 - 日志噪音过滤器
 """
 
+import logging
 import threading
 import time
 from unittest.mock import MagicMock, patch
@@ -153,6 +154,9 @@ class TestUnityDeviceInjection:
     @pytest.fixture(autouse=True)
     def _apply_patches(self):
         patches.patch_device_manager_for_unity()
+        # 重置补发信号的上一轮状态,避免测试间相互影响
+        patches._unity_device_in_list[0] = None
+        yield
 
     def _fake_dm(self):
         dm = MagicMock()
@@ -194,6 +198,31 @@ class TestUnityDeviceInjection:
         assert entry['capture'] == 'windows'
         assert entry['imei'] == 'unity'
         assert entry['nick'] == 'Unity Editor'
+
+    def test_emit_replayed_after_injection(self):
+        """original_do_refresh 的 adb_devices 信号在 unity 注入之前发出,
+        UI 快照不含 Unity 行;注入后必须按状态变化补发一次"""
+        from ok.device.DeviceManager import DeviceManager
+
+        dm = self._fake_dm()
+
+        with patch('socket.socket') as mock_socket_cls, \
+                patch.object(patches, '_auto_enable_correct_combat_task'), \
+                patch('ok.core.events.communicate') as mock_comm:
+            sock = mock_socket_cls.return_value
+            sock.connect_ex.return_value = 0  # 端口可达
+
+            DeviceManager.do_refresh(dm)
+            assert mock_comm.adb_devices.emit.call_count == 1
+
+            # 下一轮状态未变(unity 仍在列表),不重复发
+            DeviceManager.do_refresh(dm)
+            assert mock_comm.adb_devices.emit.call_count == 1
+
+            # 端口关闭,unity 被移出,状态变化,再补发一次
+            sock.connect_ex.return_value = 1
+            DeviceManager.do_refresh(dm)
+            assert mock_comm.adb_devices.emit.call_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -291,6 +320,137 @@ class TestUnityBypass:
         # 连续 5 次异常触发健康告警,20 次触发断连告警并退出
         assert mock_unhealthy.call_count == 1
         assert mock_disconnected.call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# Unity do_start 不回退标准模式
+# ---------------------------------------------------------------------------
+
+class TestUnityDoStartNoFallback:
+    """Unity 模式下 DeviceManager.do_start 不再回退标准模式。
+
+    旧逻辑连接失败后落入原版 do_start,框架 set_preferred_device 会把
+    preferred 永久改写成首个可用设备,之后 Unity 端口恢复、重启 GUI
+    也不再尝试连接。现在失败只节流告警,等刷新循环自动重连。
+    """
+
+    @pytest.fixture(autouse=True)
+    def _apply_patches(self):
+        from ok.device.DeviceManager import DeviceManager
+        patches.patch_device_manager_for_unity()
+        self.original_calls = []
+        self._real_orig = DeviceManager.do_start.__ok_jump_orig__
+        DeviceManager.do_start.__ok_jump_orig__ = (
+            lambda dm, notify=True: self.original_calls.append((dm, notify)))
+        # 重置告警节流时间戳,避免测试间相互影响
+        patches._unity_unreachable_at = 0.0
+        yield
+        DeviceManager.do_start.__ok_jump_orig__ = self._real_orig
+
+    def _fake_dm(self, preferred='unity'):
+        dm = MagicMock()
+        dm.config = {'preferred': preferred}
+        return dm
+
+    def test_port_closed_returns_without_fallback(self):
+        from ok.device.DeviceManager import DeviceManager
+        dm = self._fake_dm()
+
+        with patch.object(patches, '_is_unity_port_open', return_value=False), \
+                patch('ok.core.notifications.alert_error') as mock_alert:
+            DeviceManager.do_start(dm, notify=False)
+
+        assert self.original_calls == []
+        mock_alert.assert_called_once()
+
+    def test_port_open_success_stores_connection(self):
+        from ok.device.DeviceManager import DeviceManager
+        dm = self._fake_dm()
+        og = MagicMock()
+
+        with patch.object(patches, '_is_unity_port_open', return_value=True), \
+                patch.object(patches, 'og', og), \
+                patch('src.utils.UnityConnection.UnityConnection') as conn_cls:
+            conn_cls.return_value.connect.return_value = True
+            DeviceManager.do_start(dm, notify=False)
+
+        assert self.original_calls == []
+        conn_cls.return_value.connect.assert_called_once()
+        assert og.my_app._unity_connection is conn_cls.return_value
+
+    def test_connect_retries_then_alerts_without_fallback(self):
+        from ok.device.DeviceManager import DeviceManager
+        dm = self._fake_dm()
+        og = MagicMock()
+        sentinel = object()
+        og.my_app._unity_connection = sentinel
+
+        with patch.object(patches, '_is_unity_port_open', return_value=True), \
+                patch.object(patches, 'og', og), \
+                patch.object(patches.time, 'sleep'), \
+                patch('ok.core.notifications.alert_error') as mock_alert, \
+                patch('src.utils.UnityConnection.UnityConnection') as conn_cls:
+            conn_cls.return_value.connect.return_value = False
+            DeviceManager.do_start(dm, notify=False)
+
+        # 1 次直连 + 2 次重试,失败后只告警,不改写 preferred、不回退
+        assert conn_cls.return_value.connect.call_count == 3
+        assert self.original_calls == []
+        mock_alert.assert_called_once()
+        assert og.my_app._unity_connection is sentinel
+        assert dm.config['preferred'] == 'unity'
+
+    def test_alert_throttled_within_interval(self):
+        from ok.device.DeviceManager import DeviceManager
+        dm = self._fake_dm()
+
+        with patch.object(patches, '_is_unity_port_open', return_value=False), \
+                patch('ok.core.notifications.alert_error') as mock_alert:
+            DeviceManager.do_start(dm)
+            DeviceManager.do_start(dm)
+
+        assert self.original_calls == []
+        mock_alert.assert_called_once()
+
+    def test_non_unity_preferred_calls_original(self):
+        from ok.device.DeviceManager import DeviceManager
+        dm = self._fake_dm(preferred='MuMuPlayer-15.0-0')
+
+        DeviceManager.do_start(dm, notify=False)
+
+        assert len(self.original_calls) == 1
+
+
+# ---------------------------------------------------------------------------
+# UnityConnection 日志落盘
+# ---------------------------------------------------------------------------
+
+class TestUnityConnectionLogging:
+    """UnityConnection 必须经 ok-script Logger 输出,否则日志不进文件"""
+
+    def test_module_logger_is_ok_logger(self):
+        import importlib
+        from ok.util.logger import Logger
+
+        # src.utils.__init__ 把同名类导出,需显式取模块对象
+        module = importlib.import_module('src.utils.UnityConnection')
+        module_logger = module.logger
+        assert isinstance(module_logger, Logger)
+        assert module_logger.name == 'UnityConnection'
+
+    def test_connect_failure_visible_in_ok_logger(self, caplog):
+        from src.utils.UnityConnection import UnityConnection
+
+        conn = UnityConnection(host='127.0.0.1', port=1)
+        with caplog.at_level(logging.WARNING, logger='ok'):
+            result = conn.connect()
+
+        assert result is False
+        assert any(
+            'UnityConnection:' in record.getMessage()
+            and 'Unity 连接失败' in record.getMessage()
+            for record in caplog.records
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -63,18 +63,35 @@ basic_config_option = ConfigOption(
     icon=FluentIcon.SETTING
 )
 
+test_env_option = ConfigOption(
+    '测试环境',
+    {
+        '目标环境': '公共服',
+        '私服服务器目录': r'E:\CN-CBT-Server',
+    },
+    config_type={
+        '目标环境': {'type': "drop_down", 'options': ['公共服', '私服']},
+    },
+    config_description={
+        '目标环境': '当前测试所连的服务器，执行报告会记录该环境来源',
+        '私服服务器目录': '私服服务端所在路径；其 actionLog/ 下含搜打撤对局、'
+                     '掉落、道具流水等日志，可用于货币/掉落类用例的服务端侧核对',
+    },
+    icon=FluentIcon.GLOBE
+)
+
 config = {
     'debug': False,
     'use_gui': True,
     'config_folder': 'configs',
     'gui_icon': 'icons/icon.png',
     'gui_title': '漫画群星：大集结 - 自动化工具',
-    'version': '1.8.0',
+    'version': '1.10.1',
     
     # 自定义全局对象（用于 YOLO 检测等功能）
     'my_app': ['src.globals', 'Globals'],
     
-    'global_configs': [basic_config_option, key_config_option],
+    'global_configs': [basic_config_option, key_config_option, test_env_option],
     
     'ocr': {
         'lib': 'onnxocr',
@@ -136,6 +153,7 @@ config = {
         ['src.task.AutoTutorialTask', 'AutoTutorialTask'],
         ['src.task.AutoMatchTask', 'AutoMatchTask'],
         ['src.task.DailyTask', 'DailyTask'],
+        ['src.task.BattleRoomTestTask', 'BattleRoomTestTask'],  # 战备房间测试用例(Unity直连)
     ],
     
     'trigger_tasks': [

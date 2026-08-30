@@ -67,7 +67,13 @@ def build_wenjuan_task():
 
 
 class TestWenjuanScreen:
-    
+
+    @pytest.fixture(autouse=True)
+    def _fast_wenjuan_wait(self, monkeypatch):
+        # _handle_wenjuan 是墙上时钟死等循环,真实 30s 常量在单测里纯属
+        # 空耗,调小到 0.2s(sleep 已被 conftest 截断,循环快速轮空)
+        monkeypatch.setattr(AutoLoginTask, "WENJUAN_WAIT_TIMEOUT", 0.2)
+
     def test_check_wenjuan_screen_template_match_success(self):
         task = build_wenjuan_task()
         task.find_one = MagicMock(return_value=(100, 50))
@@ -206,7 +212,16 @@ class TestWenjuanScreen:
         assert result is True
         task.click_relative.assert_called_once()
     
-    def test_click_wenjuan_option_timeout(self):
+    def test_click_wenjuan_option_timeout(self, monkeypatch):
+        import importlib
+
+        from tests.conftest import _FastClock
+
+        # _click_wenjuan_option 的 timeout=10 是函数内硬编码的墙上时钟
+        # 死等循环,只在本用例注入加速时钟让截止时间快速到期
+        module = importlib.import_module("src.task.AutoLoginTask")
+        monkeypatch.setattr(module, "time", _FastClock())
+
         task = build_wenjuan_task()
         task.find_boxes = MagicMock(return_value=[])
         

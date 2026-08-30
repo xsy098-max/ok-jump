@@ -53,7 +53,7 @@ class AutoLoginTaskUnity(BaseTask, JumpTaskMixin):
 
         self.default_config = {
             '账号': '',
-            '勾选新手教程': True,
+            '勾选新手教程': False,
             '步骤间隔(秒)': 2,
             '最大等待(秒)': 120,
         }
@@ -176,10 +176,27 @@ class AutoLoginTaskUnity(BaseTask, JumpTaskMixin):
                 return True
 
             elif state == "CharacterSelection":
-                self.logger.info("=" * 50)
-                self.logger.info("Unity 自动登录完成！已到达角色选择界面")
-                self.logger.info(f"耗时: {time.time() - start_time:.1f} 秒")
-                self.logger.info("=" * 50)
+                # 多角色账号：选角界面需选择角色并确认后才会进入主城
+                rr = conn.get_ui_info(name_contains='RoleButton1', max_results=4)
+                rb = next((it['path'] for it in rr.get('items', [])
+                           if it.get('activeInHierarchy')
+                           and it.get('hasButton')), None)
+                if rb:
+                    self._exec(conn, 'automation_click_ui',
+                               {'path': rb}, log_level='warning')
+                    time.sleep(1)
+                okr = conn.get_ui_info(name_contains='BtnOk', max_results=6)
+                okb = next((it['path'] for it in okr.get('items', [])
+                            if it.get('activeInHierarchy')
+                            and it.get('hasButton')
+                            and it['name'] == 'BtnOk'), None)
+                if okb:
+                    self.logger.info("选角界面：点击确认进入主城")
+                    self._exec(conn, 'automation_click_ui',
+                               {'path': okb}, log_level='warning')
+                    time.sleep(step_interval)
+                    continue
+                self.logger.info("已到达角色选择界面(无确认按钮)，视为登录完成")
                 return True
 
             else:

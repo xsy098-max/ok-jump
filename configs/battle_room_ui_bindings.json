@@ -1,0 +1,4472 @@
+{
+ "_source": "E:\\Program\\Client-Jump",
+ "_note": "scripts/extract_sdc_ui.py 从游戏工程生成的绑定清单；候选表/锚点只允许引用这里的名称或真机枚举结果",
+ "behaviours": {
+  "ActivityLobbyWindow": [
+   {
+    "name": "PanelTrans",
+    "type": "RectTransform"
+   }
+  ],
+  "Activity_DailyDeposit_TaskItem": [
+   {
+    "name": "BtnJump",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnReceive",
+    "type": "WButton"
+   },
+   {
+    "name": "TxtDesc",
+    "type": "WText"
+   },
+   {
+    "name": "TxtProgress",
+    "type": "WText"
+   },
+   {
+    "name": "obj_Mask",
+    "type": "RectTransform"
+   },
+   {
+    "name": "wtxt_Lock",
+    "type": "WText"
+   }
+  ],
+  "Activity_ExchangePanel_TaskItem": [
+   {
+    "name": "BtnToggle",
+    "type": "Button"
+   },
+   {
+    "name": "Btn_Exchange",
+    "type": "WButton"
+   },
+   {
+    "name": "TxtProgress",
+    "type": "WText"
+   }
+  ],
+  "Activity_LimitStorePanel": [
+   {
+    "name": "BtnAfter",
+    "type": "WButton"
+   },
+   {
+    "name": "Text_DiscountPercent",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Percent",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Time",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_DiscountTime",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_PercentTime",
+    "type": "WText"
+   }
+  ],
+  "Activity_LimitStorePanel_Obj_Item": [
+   {
+    "name": "BtnPreview",
+    "type": "WButton"
+   },
+   {
+    "name": "Button_Free",
+    "type": "Button"
+   },
+   {
+    "name": "Button_Purchase",
+    "type": "Button"
+   },
+   {
+    "name": "Text_Gift",
+    "type": "WText"
+   },
+   {
+    "name": "Text_IconNum",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Limit",
+    "type": "WText"
+   },
+   {
+    "name": "TxOriNum",
+    "type": "WText"
+   },
+   {
+    "name": "TxtSellPrice",
+    "type": "WText"
+   }
+  ],
+  "Activity_LimitStorePanel_Obj_Item_1": [
+   {
+    "name": "Btn_Click",
+    "type": "WButton"
+   }
+  ],
+  "Activity_NewTrainingPanel_Taskcell": [
+   {
+    "name": "Button_JumpTo",
+    "type": "WButton"
+   },
+   {
+    "name": "Button_Receive",
+    "type": "WButton"
+   },
+   {
+    "name": "Text_Describe",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Number",
+    "type": "WText"
+   }
+  ],
+  "Activity_NewTraining_Taskcell": [
+   {
+    "name": "Button_JumpTo",
+    "type": "WButton"
+   },
+   {
+    "name": "Button_Receive",
+    "type": "WButton"
+   },
+   {
+    "name": "Text_Describe",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Number",
+    "type": "WText"
+   }
+  ],
+  "Activity_ShopByPagePanel": [
+   {
+    "name": "BtnJump",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnPreview",
+    "type": "WButton"
+   },
+   {
+    "name": "Text_Content",
+    "type": "WText"
+   },
+   {
+    "name": "TxtActivityDesc",
+    "type": "WText"
+   },
+   {
+    "name": "TxtActivityName",
+    "type": "WText"
+   },
+   {
+    "name": "TxtActivityTime",
+    "type": "WText"
+   },
+   {
+    "name": "TxtActivityTitle",
+    "type": "WText"
+   }
+  ],
+  "Activity_TaskRechargePanel": [
+   {
+    "name": "BtnRule",
+    "type": "WButton"
+   },
+   {
+    "name": "Text_ActivityGain",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Gain",
+    "type": "WText"
+   },
+   {
+    "name": "TxtActivityTime",
+    "type": "WText"
+   }
+  ],
+  "Activity_TaskRechargePanel_TaskItem": [
+   {
+    "name": "BtnJump",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnReceive",
+    "type": "WButton"
+   },
+   {
+    "name": "TxtDesc",
+    "type": "WText"
+   },
+   {
+    "name": "TxtProgress",
+    "type": "WText"
+   }
+  ],
+  "Activity_TaskRecharge_TaskItem": [
+   {
+    "name": "TxtProgress",
+    "type": "WText"
+   }
+  ],
+  "Activity_TrialShopPanel": [
+   {
+    "name": "BtnJump",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnPreview",
+    "type": "WButton"
+   },
+   {
+    "name": "Text_Content",
+    "type": "WText"
+   },
+   {
+    "name": "TxtActivityDesc",
+    "type": "WText"
+   },
+   {
+    "name": "TxtActivityName",
+    "type": "WText"
+   },
+   {
+    "name": "TxtActivityTime",
+    "type": "WText"
+   },
+   {
+    "name": "TxtActivityTitle",
+    "type": "WText"
+   }
+  ],
+  "Activity_TrialShopPanel_GoodsItem": [
+   {
+    "name": "BtnDetail",
+    "type": "WButton"
+   },
+   {
+    "name": "Button_Free",
+    "type": "WButton"
+   },
+   {
+    "name": "Button_Money",
+    "type": "WButton"
+   },
+   {
+    "name": "TxOriNum",
+    "type": "WText"
+   },
+   {
+    "name": "TxtDiscunt",
+    "type": "WText"
+   },
+   {
+    "name": "TxtSellPrice",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_BuyLimit",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_IconName",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_Num",
+    "type": "WText"
+   }
+  ],
+  "Activity_TrialTaskPanel": [
+   {
+    "name": "BtnJump",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnPreview",
+    "type": "WButton"
+   },
+   {
+    "name": "Text_Content",
+    "type": "WText"
+   },
+   {
+    "name": "TxtActivityDesc",
+    "type": "WText"
+   },
+   {
+    "name": "TxtActivityName",
+    "type": "WText"
+   },
+   {
+    "name": "TxtActivityTime",
+    "type": "WText"
+   },
+   {
+    "name": "TxtActivityTitle",
+    "type": "WText"
+   }
+  ],
+  "Activity_TrialTaskPanel_PageItem": [
+   {
+    "name": "BtnPageItem",
+    "type": "WButton"
+   },
+   {
+    "name": "TxtNotSelect",
+    "type": "WText"
+   },
+   {
+    "name": "TxtSelect",
+    "type": "WText"
+   }
+  ],
+  "Activity_TrialTaskPanel_TaskItem": [
+   {
+    "name": "BtnJump",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnReceive",
+    "type": "WButton"
+   },
+   {
+    "name": "TxtDesc",
+    "type": "WText"
+   }
+  ],
+  "CareerLobbyWindow": [
+   {
+    "name": "PanelTrans",
+    "type": "RectTransform"
+   }
+  ],
+  "ClubLobbyWindow": [
+   {
+    "name": "PanelTrans",
+    "type": "RectTransform"
+   }
+  ],
+  "ClubLobbyWindow_TabItem_Extend": [
+   {
+    "name": "BtnPage",
+    "type": "Button"
+   },
+   {
+    "name": "TextHighLightTabName",
+    "type": "WText"
+   },
+   {
+    "name": "TextNormalTabName",
+    "type": "WText"
+   }
+  ],
+  "ClubLobbyWindow_TabItem_Sub": [
+   {
+    "name": "BtnPage",
+    "type": "Button"
+   },
+   {
+    "name": "TextHighLightTabName",
+    "type": "WText"
+   },
+   {
+    "name": "TextNormalTabName",
+    "type": "WText"
+   }
+  ],
+  "ClubPanel_GrandLine_TaskItem": [
+   {
+    "name": "BtnItem",
+    "type": "WButton"
+   },
+   {
+    "name": "Txt_HeroName",
+    "type": "WText"
+   },
+   {
+    "name": "WinNumber",
+    "type": "WText"
+   }
+  ],
+  "ClubPanel_Task": [
+   {
+    "name": "BtnReceiveBoxReward",
+    "type": "WButton"
+   },
+   {
+    "name": "Slider",
+    "type": "Slider"
+   },
+   {
+    "name": "Text_TodayNumber",
+    "type": "WText"
+   }
+  ],
+  "ClubPanel_Task_BoxItemPref": [
+   {
+    "name": "BtnBoxItem",
+    "type": "WButton"
+   },
+   {
+    "name": "Text_Number",
+    "type": "WText"
+   }
+  ],
+  "ClubPanel_Task_Cell": [
+   {
+    "name": "BtnDescHelp",
+    "type": "Button"
+   },
+   {
+    "name": "Button_Go",
+    "type": "Button"
+   },
+   {
+    "name": "Button_Sign",
+    "type": "Button"
+   },
+   {
+    "name": "Text_ActiveNumber",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Desc",
+    "type": "WText"
+   },
+   {
+    "name": "Text_DescTitle",
+    "type": "WText"
+   }
+  ],
+  "ClubTaskAwardWindow": [
+   {
+    "name": "BtnClose",
+    "type": "Button"
+   }
+  ],
+  "ClubTaskAwardWindow_InviteInfoItem": [
+   {
+    "name": "Text_Progress",
+    "type": "WText"
+   }
+  ],
+  "EntertainmentSeasonChangeView": [
+   {
+    "name": "BtnClose",
+    "type": "WButton"
+   },
+   {
+    "name": "Text_LastRank",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Rank",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Read",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Recieve",
+    "type": "WText"
+   }
+  ],
+  "EntertainmentSeasonView_SeasonList_Cell1": [
+   {
+    "name": "Btn_Click",
+    "type": "WButton"
+   },
+   {
+    "name": "Text_Number",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Rank",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_ScoreNumber",
+    "type": "WText"
+   }
+  ],
+  "EntertainmentSeasonView_SeasonList_SubCell": [
+   {
+    "name": "TextTitle",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_ScoreNumber",
+    "type": "WText"
+   }
+  ],
+  "EntertainmentTaskView_RewardList_Cell": [
+   {
+    "name": "Image_YellowLine",
+    "type": "WImage"
+   },
+   {
+    "name": "ItemNum",
+    "type": "WText"
+   },
+   {
+    "name": "RewardItemButton",
+    "type": "Button"
+   },
+   {
+    "name": "Text_Number",
+    "type": "WText"
+   }
+  ],
+  "EntertainmentTaskView_RewardPanel": [
+   {
+    "name": "ItemNum",
+    "type": "WText"
+   },
+   {
+    "name": "RewardItemButton",
+    "type": "Button"
+   },
+   {
+    "name": "SeasonNum",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Number",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_Level",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_MedalNumber",
+    "type": "WText"
+   }
+  ],
+  "EntertainmentTaskView_TaskList_Cell": [
+   {
+    "name": "Button_Go",
+    "type": "Button"
+   },
+   {
+    "name": "Button_Recieve",
+    "type": "Button"
+   },
+   {
+    "name": "TaskSlider",
+    "type": "Slider"
+   },
+   {
+    "name": "Text_Desc",
+    "type": "WText"
+   },
+   {
+    "name": "TxTaskProgress",
+    "type": "WText"
+   }
+  ],
+  "HeroShopSkinView": [
+   {
+    "name": "TxAttackNum",
+    "type": "WText"
+   },
+   {
+    "name": "TxHeroName",
+    "type": "WText"
+   },
+   {
+    "name": "TxSkinDesc",
+    "type": "WText"
+   },
+   {
+    "name": "TxSkinName",
+    "type": "WText"
+   },
+   {
+    "name": "Tx_BallNum",
+    "type": "WText"
+   },
+   {
+    "name": "Tx_LifeNum",
+    "type": "WText"
+   },
+   {
+    "name": "Tx_SkillNum",
+    "type": "WText"
+   },
+   {
+    "name": "Tx_SpeedNum",
+    "type": "WText"
+   }
+  ],
+  "LobbyTeamView": [
+   {
+    "name": "BtnBan",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnCancel",
+    "type": "Button"
+   },
+   {
+    "name": "BtnChoosePlay",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnChoosePlay_Gray",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnClubGrandLine",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnFriend",
+    "type": "Button"
+   },
+   {
+    "name": "BtnHelp",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnJumpClub",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnNodeSeason",
+    "type": "Button"
+   },
+   {
+    "name": "BtnPrepare",
+    "type": "Button"
+   },
+   {
+    "name": "BtnRank",
+    "type": "Button"
+   },
+   {
+    "name": "BtnReadyTips",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnReview",
+    "type": "Button"
+   },
+   {
+    "name": "BtnStart",
+    "type": "Button"
+   },
+   {
+    "name": "BtnTask",
+    "type": "WButton"
+   },
+   {
+    "name": "ButtonActivity",
+    "type": "WButton"
+   },
+   {
+    "name": "ButtonReward2",
+    "type": "WButton"
+   },
+   {
+    "name": "Button_Convene",
+    "type": "WButton"
+   },
+   {
+    "name": "CloseFriendPanel",
+    "type": "Button"
+   },
+   {
+    "name": "FriendButton",
+    "type": "Button"
+   },
+   {
+    "name": "FriendTrans",
+    "type": "RectTransform"
+   },
+   {
+    "name": "GameType",
+    "type": "WText"
+   },
+   {
+    "name": "HeroListContent",
+    "type": "RectTransform"
+   },
+   {
+    "name": "ImgCancel",
+    "type": "RectTransform"
+   },
+   {
+    "name": "ImgPrepare",
+    "type": "RectTransform"
+   },
+   {
+    "name": "ImgStart",
+    "type": "RectTransform"
+   },
+   {
+    "name": "MapName",
+    "type": "WText"
+   },
+   {
+    "name": "Obj_Convene",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Text_Ban",
+    "type": "WText"
+   },
+   {
+    "name": "Text_BanTime",
+    "type": "WText"
+   },
+   {
+    "name": "Text_ClubGrandLineTimes",
+    "type": "WText"
+   },
+   {
+    "name": "Text_FirstWin",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Number",
+    "type": "WText"
+   },
+   {
+    "name": "TxMode",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_Level_1",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_ScoreNumber",
+    "type": "WText"
+   },
+   {
+    "name": "WinNumber",
+    "type": "WText"
+   }
+  ],
+  "LobbyTeamView_MemberList_Cell": [
+   {
+    "name": "AddFriendButton",
+    "type": "Button"
+   },
+   {
+    "name": "BtnKickChange",
+    "type": "Button"
+   },
+   {
+    "name": "BtnKickOut",
+    "type": "Button"
+   },
+   {
+    "name": "BtnTask",
+    "type": "WButton"
+   },
+   {
+    "name": "Button_Develop",
+    "type": "WButton"
+   },
+   {
+    "name": "Img_SingleHero_Button",
+    "type": "WButton"
+   },
+   {
+    "name": "TextMastery",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Number",
+    "type": "WText"
+   },
+   {
+    "name": "TxHeroIndex",
+    "type": "WText"
+   },
+   {
+    "name": "TxPlayerName",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_LevelNumber",
+    "type": "WText"
+   },
+   {
+    "name": "_Txt_CupNumber",
+    "type": "WText"
+   }
+  ],
+  "Personal_PlayerInfoPanel": [
+   {
+    "name": "BtnCopyUID",
+    "type": "Button"
+   },
+   {
+    "name": "BtnHeadIcon",
+    "type": "Button"
+   },
+   {
+    "name": "BtnRename",
+    "type": "Button"
+   },
+   {
+    "name": "BtnVisitor",
+    "type": "WButton"
+   },
+   {
+    "name": "Button_TitleSet",
+    "type": "WButton"
+   },
+   {
+    "name": "Honor_Button_Arrow",
+    "type": "WButton"
+   },
+   {
+    "name": "Img_Di_NoHonor",
+    "type": "RectTransform"
+   },
+   {
+    "name": "PlayerID",
+    "type": "WText"
+   },
+   {
+    "name": "RedPoint_Icon",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Text_HonorTitle",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Number",
+    "type": "WText"
+   },
+   {
+    "name": "Text_TeamName",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Title",
+    "type": "WText"
+   },
+   {
+    "name": "Text_VictoryNumber",
+    "type": "WText"
+   },
+   {
+    "name": "TxNickName",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_3v3Number",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_DoubleNumber",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_HistoryCup",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_HistoryRank",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_LikeNumber",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_MartialNumber",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_SeasonCup",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_SeasonRank",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_SingleNumber",
+    "type": "WText"
+   }
+  ],
+  "Personal_PlayerInfoPanelNew": [
+   {
+    "name": "BtnCopyUID",
+    "type": "Button"
+   },
+   {
+    "name": "PlayerID",
+    "type": "WText"
+   }
+  ],
+  "Personal_PlayerInfoPanelNew_Down": [
+   {
+    "name": "Btn_Visitor",
+    "type": "WButton"
+   },
+   {
+    "name": "Text_VictoryNumber",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_HistoryValue",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_SeasonValue",
+    "type": "WText"
+   }
+  ],
+  "Personal_PlayerInfoPanelNew_FightItemPref": [
+   {
+    "name": "TxtFightTitle",
+    "type": "WText"
+   },
+   {
+    "name": "TxtVictory",
+    "type": "WText"
+   }
+  ],
+  "Personal_PlayerInfoPanelNew_HeroItemPref": [
+   {
+    "name": "Txt_HeroNumber",
+    "type": "WText"
+   }
+  ],
+  "Personal_PlayerInfoPanelNew_Middle": [
+   {
+    "name": "Btn_RankModeSwitch",
+    "type": "Button"
+   },
+   {
+    "name": "SDC_Txt_HistoryRank",
+    "type": "WText"
+   },
+   {
+    "name": "SDC_Txt_SeasonRank",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Rank",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_HistoryCup",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_HistoryRank",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_MedalHistoryCup",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_MedalSeasonCup",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_SeasonCup",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_SeasonRank",
+    "type": "WText"
+   }
+  ],
+  "Personal_PlayerInfoPanelNew_Top": [
+   {
+    "name": "BtnHeadIcon",
+    "type": "Button"
+   },
+   {
+    "name": "BtnHonor",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnRename",
+    "type": "Button"
+   },
+   {
+    "name": "Btn_JobHonor",
+    "type": "WButton"
+   },
+   {
+    "name": "Text_NoHonorTitle",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Peak",
+    "type": "WText"
+   },
+   {
+    "name": "TxNickName",
+    "type": "WText"
+   }
+  ],
+  "Personal_PlayerInfoPanelNew_VisitorItemPref": [
+   {
+    "name": "BtnVisitor",
+    "type": "Button"
+   }
+  ],
+  "RankMain_SDCRankPanel": [
+   {
+    "name": "Bg_Green",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Bg_Grey",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Bg_Orange",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Bg_Peak",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Bg_Red",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Bg_Red_Text_Rank",
+    "type": "WText"
+   },
+   {
+    "name": "BtnChangeSeat",
+    "type": "Button"
+   },
+   {
+    "name": "CommonPanel",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Image_EntireCup",
+    "type": "RectTransform"
+   },
+   {
+    "name": "NodeHeadBg_Grey",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Obj_AchieveCup",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Obj_Empty",
+    "type": "RectTransform"
+   },
+   {
+    "name": "ShowPlayerInfoBtn",
+    "type": "WButton"
+   },
+   {
+    "name": "Text_AchievementScore",
+    "type": "WText"
+   },
+   {
+    "name": "Text_EntireCup",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Heroname",
+    "type": "WText"
+   },
+   {
+    "name": "Text_On",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Title1",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Title2",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Title3",
+    "type": "WText"
+   },
+   {
+    "name": "TxName",
+    "type": "WText"
+   },
+   {
+    "name": "TxNoHero",
+    "type": "RectTransform"
+   },
+   {
+    "name": "TxNoRank",
+    "type": "RectTransform"
+   },
+   {
+    "name": "TxOrder",
+    "type": "WText"
+   },
+   {
+    "name": "TxRankName",
+    "type": "WText"
+   },
+   {
+    "name": "TxRankValue",
+    "type": "WText"
+   },
+   {
+    "name": "TxTip_Empty",
+    "type": "WText"
+   }
+  ],
+  "RechargeShopMBView": [
+   {
+    "name": "TxWalletBalance",
+    "type": "WText"
+   },
+   {
+    "name": "WalletButton",
+    "type": "Button"
+   },
+   {
+    "name": "WalletHelpButton",
+    "type": "Button"
+   }
+  ],
+  "RechargeShopMBView_RechargeList_Cell": [
+   {
+    "name": "AddGiftNum",
+    "type": "WText"
+   },
+   {
+    "name": "BottomNode",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Button3_Red_Buy",
+    "type": "Button"
+   },
+   {
+    "name": "ButtonBanner",
+    "type": "Button"
+   },
+   {
+    "name": "ButtonText",
+    "type": "WText"
+   },
+   {
+    "name": "FirstGiftNum",
+    "type": "WText"
+   },
+   {
+    "name": "TxName",
+    "type": "WText"
+   }
+  ],
+  "SDCCollectWindow": [
+   {
+    "name": "wbtn_Award",
+    "type": "Button"
+   },
+   {
+    "name": "wbtn_Update",
+    "type": "WButton"
+   },
+   {
+    "name": "wimg_GreenCircle",
+    "type": "WImage"
+   },
+   {
+    "name": "wimg_GreyCircle",
+    "type": "WImage"
+   },
+   {
+    "name": "wtxt_Num",
+    "type": "WText"
+   },
+   {
+    "name": "wtxt_Submit",
+    "type": "WText"
+   },
+   {
+    "name": "wtxt_SubmitNum",
+    "type": "WText"
+   },
+   {
+    "name": "wtxt_UpdateNum",
+    "type": "WText"
+   },
+   {
+    "name": "wtxt_UpdateTime",
+    "type": "WText"
+   }
+  ],
+  "SDCCollectWindow_SeasonList_Cell": [
+   {
+    "name": "SwitchBtnItem",
+    "type": "WButton"
+   },
+   {
+    "name": "SwitchCloseButton",
+    "type": "WButton"
+   },
+   {
+    "name": "SwitchOpenButton",
+    "type": "WButton"
+   },
+   {
+    "name": "wbtn_GreySubmit",
+    "type": "Button"
+   },
+   {
+    "name": "wbtn_RedSubmit",
+    "type": "Button"
+   },
+   {
+    "name": "wtxt_GreySubmit",
+    "type": "WText"
+   },
+   {
+    "name": "wtxt_Lock",
+    "type": "WText"
+   },
+   {
+    "name": "wtxt_Locked",
+    "type": "WText"
+   },
+   {
+    "name": "wtxt_RedSubmit",
+    "type": "WText"
+   },
+   {
+    "name": "wtxt_Type",
+    "type": "WText"
+   }
+  ],
+  "SDCItemTips": [
+   {
+    "name": "Content",
+    "type": "RectTransform"
+   }
+  ],
+  "SDCItemTips_ItemMid": [
+   {
+    "name": "Button_Buy",
+    "type": "Button"
+   },
+   {
+    "name": "Button_Change",
+    "type": "Button"
+   },
+   {
+    "name": "Button_Equip",
+    "type": "Button"
+   },
+   {
+    "name": "Button_EquipText",
+    "type": "WText"
+   },
+   {
+    "name": "Button_Fix",
+    "type": "Button"
+   },
+   {
+    "name": "Button_PutInBag",
+    "type": "Button"
+   },
+   {
+    "name": "Button_PutInSafetyBox",
+    "type": "Button"
+   },
+   {
+    "name": "Button_PutInWarehouse",
+    "type": "Button"
+   },
+   {
+    "name": "Button_Sold",
+    "type": "Button"
+   },
+   {
+    "name": "Button_UnInstall",
+    "type": "Button"
+   },
+   {
+    "name": "ItemNum",
+    "type": "WText"
+   },
+   {
+    "name": "TxTips",
+    "type": "WText"
+   }
+  ],
+  "SDCItemTips_ItemMid_Item_Pref": [
+   {
+    "name": "Txt_Desc",
+    "type": "WText"
+   }
+  ],
+  "SDCItemTips_ItemTop": [
+   {
+    "name": "Text_Detail",
+    "type": "WText"
+   },
+   {
+    "name": "Text_DetailNum",
+    "type": "WText"
+   },
+   {
+    "name": "Text_TypeContent",
+    "type": "WText"
+   },
+   {
+    "name": "TxItemName",
+    "type": "WText"
+   },
+   {
+    "name": "TxNumber",
+    "type": "WText"
+   }
+  ],
+  "SDCMainView": [
+   {
+    "name": "AutoMatchTeam",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnBan",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnCancel",
+    "type": "Button"
+   },
+   {
+    "name": "BtnChoosePlay",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnChoosePlay_Gray",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnClubGrandLine",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnCollect",
+    "type": "Button"
+   },
+   {
+    "name": "BtnFriend",
+    "type": "Button"
+   },
+   {
+    "name": "BtnHelp",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnJumpClub",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnNodeSeason",
+    "type": "Button"
+   },
+   {
+    "name": "BtnPreBattle",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnPrepare",
+    "type": "Button"
+   },
+   {
+    "name": "BtnReadyTips",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnStart",
+    "type": "Button"
+   },
+   {
+    "name": "BtnStore",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnTask",
+    "type": "Button"
+   },
+   {
+    "name": "ButtonActivity",
+    "type": "WButton"
+   },
+   {
+    "name": "ButtonReward2",
+    "type": "WButton"
+   },
+   {
+    "name": "Button_Convene",
+    "type": "WButton"
+   },
+   {
+    "name": "CloseFriendPanel",
+    "type": "Button"
+   },
+   {
+    "name": "FriendTrans",
+    "type": "RectTransform"
+   },
+   {
+    "name": "HeroListContent",
+    "type": "RectTransform"
+   },
+   {
+    "name": "ImgCancel",
+    "type": "RectTransform"
+   },
+   {
+    "name": "ImgPrepare",
+    "type": "RectTransform"
+   },
+   {
+    "name": "ImgStart",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Img_AutoMatchTeam",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Img_NoAutoMatchTeam",
+    "type": "RectTransform"
+   },
+   {
+    "name": "MapEntryValueText",
+    "type": "WText"
+   },
+   {
+    "name": "MapName",
+    "type": "WText"
+   },
+   {
+    "name": "Obj_Convene",
+    "type": "RectTransform"
+   },
+   {
+    "name": "PassBtnTask",
+    "type": "WButton"
+   },
+   {
+    "name": "RankButton",
+    "type": "WButton"
+   },
+   {
+    "name": "Text_Ban",
+    "type": "WText"
+   },
+   {
+    "name": "Text_BanTime",
+    "type": "WText"
+   },
+   {
+    "name": "Text_ClubGrandLineTimes",
+    "type": "WText"
+   },
+   {
+    "name": "Text_FirstWin",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Number",
+    "type": "WText"
+   },
+   {
+    "name": "TxMode",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_Level_1",
+    "type": "WText"
+   },
+   {
+    "name": "WinNumber",
+    "type": "WText"
+   },
+   {
+    "name": "wbtn_Place",
+    "type": "WButton"
+   }
+  ],
+  "SDCMainView_MemberList_Cell": [
+   {
+    "name": "AddFriendButton",
+    "type": "Button"
+   },
+   {
+    "name": "BtnKickChange",
+    "type": "Button"
+   },
+   {
+    "name": "BtnKickOut",
+    "type": "Button"
+   },
+   {
+    "name": "BtnTask",
+    "type": "WButton"
+   },
+   {
+    "name": "Button_Develop",
+    "type": "WButton"
+   },
+   {
+    "name": "Img_SingleHero_Button",
+    "type": "WButton"
+   },
+   {
+    "name": "TextMastery",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Number",
+    "type": "WText"
+   },
+   {
+    "name": "TxHeroIndex",
+    "type": "WText"
+   },
+   {
+    "name": "TxPlayerName",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_LevelNumber",
+    "type": "WText"
+   },
+   {
+    "name": "_Txt_CupNumber",
+    "type": "WText"
+   },
+   {
+    "name": "_Txt_LevelRank",
+    "type": "WText"
+   },
+   {
+    "name": "wbtn_Level",
+    "type": "WButton"
+   },
+   {
+    "name": "wtxt_Experience",
+    "type": "WText"
+   },
+   {
+    "name": "wtxt_Num",
+    "type": "WText"
+   }
+  ],
+  "SDCMatchWindow": [
+   {
+    "name": "Button_Close",
+    "type": "Button"
+   },
+   {
+    "name": "DetailMapName",
+    "type": "WText"
+   },
+   {
+    "name": "wbtn_Go",
+    "type": "Button"
+   },
+   {
+    "name": "wtxt_DateTime",
+    "type": "WText"
+   },
+   {
+    "name": "wtxt_ItemNum",
+    "type": "WText"
+   },
+   {
+    "name": "wtxt_LimitNum",
+    "type": "WText"
+   }
+  ],
+  "SDCMatchWindow_MapList_Cell": [
+   {
+    "name": "DangerMapType",
+    "type": "WText"
+   },
+   {
+    "name": "NormalMapType",
+    "type": "WText"
+   },
+   {
+    "name": "wbtn_MapItem",
+    "type": "WButton"
+   },
+   {
+    "name": "wbtn_Select",
+    "type": "WButton"
+   },
+   {
+    "name": "wtxt_MapName",
+    "type": "WText"
+   }
+  ],
+  "SDCPreWarShopWindow": [
+   {
+    "name": "BtnBack2",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnMask",
+    "type": "WButton"
+   }
+  ],
+  "SDCPreWarShopWindow_CurrencyItem": [
+   {
+    "name": "BtnAdd",
+    "type": "Button"
+   },
+   {
+    "name": "BtnItemButton",
+    "type": "Button"
+   },
+   {
+    "name": "TxNum",
+    "type": "WText"
+   }
+  ],
+  "SDCPreWarShopWindow_Obj_Item_2": [
+   {
+    "name": "Btn_Click",
+    "type": "WButton"
+   },
+   {
+    "name": "MaskText",
+    "type": "WText"
+   },
+   {
+    "name": "TextCost",
+    "type": "WText"
+   },
+   {
+    "name": "TxtDiscount",
+    "type": "WText"
+   },
+   {
+    "name": "TxtNum",
+    "type": "WText"
+   }
+  ],
+  "SDCPreWarShopWindow_TabItem_Right": [
+   {
+    "name": "ButtonFunc",
+    "type": "Button"
+   },
+   {
+    "name": "TextHighLightName",
+    "type": "WText"
+   },
+   {
+    "name": "TextNormalName",
+    "type": "WText"
+   }
+  ],
+  "SDCPreWarWindow": [
+   {
+    "name": "BtnMask",
+    "type": "WButton"
+   },
+   {
+    "name": "SuitCancelButton",
+    "type": "WButton"
+   }
+  ],
+  "SDCPreWarWindow_Left": [
+   {
+    "name": "AmplifierTrans",
+    "type": "RectTransform"
+   },
+   {
+    "name": "BtnAmplifierHelp",
+    "type": "Button"
+   },
+   {
+    "name": "BtnChipHelp",
+    "type": "Button"
+   },
+   {
+    "name": "BtnHero",
+    "type": "Button"
+   },
+   {
+    "name": "BtnOneKeyPut",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnSet",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnSuit",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnValue",
+    "type": "Button"
+   },
+   {
+    "name": "Btn_Change",
+    "type": "WButton"
+   },
+   {
+    "name": "ChipTrans",
+    "type": "RectTransform"
+   },
+   {
+    "name": "EquipTrans",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Obj_AwakeList",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Obj_TalentList",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Text_Awake",
+    "type": "WText"
+   },
+   {
+    "name": "Text_HeroName",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Num",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Number",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Talent",
+    "type": "WText"
+   },
+   {
+    "name": "wbtn_Awake",
+    "type": "WButton"
+   },
+   {
+    "name": "wbtn_Talent",
+    "type": "WButton"
+   }
+  ],
+  "SDCPreWarWindow_Left_EquipItem": [
+   {
+    "name": "BtnItem",
+    "type": "WButton"
+   }
+  ],
+  "SDCPreWarWindow_Left_Obj_Item": [
+   {
+    "name": "Btn_Click",
+    "type": "WButton"
+   }
+  ],
+  "SDCPreWarWindow_Middle": [
+   {
+    "name": "BagClipRect",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Button_KeyChainChange",
+    "type": "WButton"
+   },
+   {
+    "name": "Button_KeyChainRemove",
+    "type": "WButton"
+   },
+   {
+    "name": "Button_SafetyBoxChange",
+    "type": "WButton"
+   },
+   {
+    "name": "Button_SafetyBoxRemove",
+    "type": "WButton"
+   },
+   {
+    "name": "CollectionRealTransSize",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Text_AmplifierNum",
+    "type": "WText"
+   },
+   {
+    "name": "Text_CollectionNum",
+    "type": "WText"
+   },
+   {
+    "name": "Text_KeyChainExpireRedLimit",
+    "type": "WText"
+   },
+   {
+    "name": "Text_KeyChainExpireYellowLimit",
+    "type": "WText"
+   },
+   {
+    "name": "Text_KeyChainTime",
+    "type": "WText"
+   },
+   {
+    "name": "Text_KeyNum",
+    "type": "WText"
+   },
+   {
+    "name": "Text_MedicineNum",
+    "type": "WText"
+   },
+   {
+    "name": "Text_SafetyBoxExpireRedLimit",
+    "type": "WText"
+   },
+   {
+    "name": "Text_SafetyBoxExpireYellowLimit",
+    "type": "WText"
+   },
+   {
+    "name": "Text_SafetyBoxNum",
+    "type": "WText"
+   },
+   {
+    "name": "Text_SafetyBoxRedLimit",
+    "type": "WText"
+   },
+   {
+    "name": "Text_SafetyBoxTime",
+    "type": "WText"
+   },
+   {
+    "name": "Text_SafetyBoxYellowLimit",
+    "type": "WText"
+   },
+   {
+    "name": "Top",
+    "type": "RectTransform"
+   }
+  ],
+  "SDCPreWarWindow_Middle_Obj_Item": [
+   {
+    "name": "Btn_Click",
+    "type": "WButton"
+   }
+  ],
+  "SDCPreWarWindow_OutBattleContainerLevelItem": [
+   {
+    "name": "Button_Activate",
+    "type": "Button"
+   },
+   {
+    "name": "Button_Get",
+    "type": "Button"
+   },
+   {
+    "name": "Button_Use",
+    "type": "Button"
+   },
+   {
+    "name": "Text_Capacity",
+    "type": "WText"
+   },
+   {
+    "name": "Text_RedNum",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Source",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Title",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Using",
+    "type": "WText"
+   },
+   {
+    "name": "Text_YellowNum",
+    "type": "WText"
+   }
+  ],
+  "SDCPreWarWindow_Right": [
+   {
+    "name": "Button_Buy",
+    "type": "Button"
+   },
+   {
+    "name": "Button_Cancel",
+    "type": "Button"
+   },
+   {
+    "name": "Button_ItemSell",
+    "type": "Button"
+   },
+   {
+    "name": "Button_Sell",
+    "type": "Button"
+   },
+   {
+    "name": "ItemNum",
+    "type": "WText"
+   },
+   {
+    "name": "SelectListMask",
+    "type": "WButton"
+   },
+   {
+    "name": "SelectText",
+    "type": "WText"
+   },
+   {
+    "name": "SelectionButton",
+    "type": "WButton"
+   },
+   {
+    "name": "SellCurrencySecondNum",
+    "type": "WText"
+   },
+   {
+    "name": "Text_DepotNum",
+    "type": "WText"
+   },
+   {
+    "name": "Text_ValueNum",
+    "type": "WText"
+   }
+  ],
+  "SDCPreWarWindow_Right_ItemCell": [
+   {
+    "name": "BtnFilter",
+    "type": "WButton"
+   },
+   {
+    "name": "TxHighLightName",
+    "type": "WText"
+   },
+   {
+    "name": "TxNormalName",
+    "type": "WText"
+   }
+  ],
+  "SDCPreWarWindow_Right_Obj_Item": [
+   {
+    "name": "BtnGou",
+    "type": "WButton"
+   },
+   {
+    "name": "Btn_Click",
+    "type": "WButton"
+   }
+  ],
+  "SDCPreWarWindow_Right_TabItem": [
+   {
+    "name": "ButtonFunc",
+    "type": "Button"
+   },
+   {
+    "name": "TextHighLightName",
+    "type": "WText"
+   },
+   {
+    "name": "TextNormalName",
+    "type": "WText"
+   }
+  ],
+  "SDCSeasonTaskWindow": [
+   {
+    "name": "Btn_Collector",
+    "type": "WButton"
+   },
+   {
+    "name": "Btn_PhaseBg",
+    "type": "WButton"
+   },
+   {
+    "name": "Btn_SeasonReward",
+    "type": "WButton"
+   },
+   {
+    "name": "CollectorProgressNumText",
+    "type": "WText"
+   },
+   {
+    "name": "CollectorRefreshText",
+    "type": "WText"
+   },
+   {
+    "name": "MainTaskProgressText",
+    "type": "WText"
+   },
+   {
+    "name": "SeasonNumberText",
+    "type": "WText"
+   },
+   {
+    "name": "SeasonRemainDaysText",
+    "type": "WText"
+   },
+   {
+    "name": "SeasonRewardButton",
+    "type": "WButton"
+   },
+   {
+    "name": "SeasonRewardCollectNumText",
+    "type": "WText"
+   },
+   {
+    "name": "SeasonRewardCollectText",
+    "type": "WText"
+   },
+   {
+    "name": "SeasonRewardTaskNumText",
+    "type": "WText"
+   },
+   {
+    "name": "SeasonRewardTaskText",
+    "type": "WText"
+   },
+   {
+    "name": "SeasonStageProgressNumText",
+    "type": "WText"
+   }
+  ],
+  "SDCSeasonTaskWindow_TaskItem": [
+   {
+    "name": "ButtonTips",
+    "type": "WButton"
+   },
+   {
+    "name": "Button_Go",
+    "type": "Button"
+   },
+   {
+    "name": "Button_Recieve",
+    "type": "Button"
+   },
+   {
+    "name": "TextDesc1",
+    "type": "WText"
+   },
+   {
+    "name": "TextDesc2",
+    "type": "WText"
+   },
+   {
+    "name": "TextTitle",
+    "type": "WText"
+   }
+  ],
+  "SDCStageTaskWindow": [
+   {
+    "name": "StageTaskProgressText",
+    "type": "WText"
+   }
+  ],
+  "SDCStageTaskWindow_StageCell": [
+   {
+    "name": "ButtonClick",
+    "type": "WButton"
+   },
+   {
+    "name": "TextLocked",
+    "type": "WText"
+   },
+   {
+    "name": "TextNormal",
+    "type": "WText"
+   },
+   {
+    "name": "TextSelected",
+    "type": "WText"
+   }
+  ],
+  "SDCStageTaskWindow_TaskItem": [
+   {
+    "name": "ButtonTips",
+    "type": "WButton"
+   },
+   {
+    "name": "Button_Go",
+    "type": "Button"
+   },
+   {
+    "name": "Button_Recieve",
+    "type": "Button"
+   },
+   {
+    "name": "TextDesc1",
+    "type": "WText"
+   },
+   {
+    "name": "TextDesc2",
+    "type": "WText"
+   },
+   {
+    "name": "TextTitle",
+    "type": "WText"
+   }
+  ],
+  "SDCTaskAwardWindow": [
+   {
+    "name": "BtnClose",
+    "type": "Button"
+   },
+   {
+    "name": "TxTitle",
+    "type": "WText"
+   }
+  ],
+  "SDCTaskAwardWindow_BoxItemTrans": [
+   {
+    "name": "BtnBoxItem",
+    "type": "WButton"
+   },
+   {
+    "name": "Text_Number",
+    "type": "WText"
+   },
+   {
+    "name": "wtxt_Num",
+    "type": "WText"
+   }
+  ],
+  "SDCTaskItem": [
+   {
+    "name": "ButtonTips",
+    "type": "WButton"
+   },
+   {
+    "name": "Button_Go",
+    "type": "Button"
+   },
+   {
+    "name": "Button_Recieve",
+    "type": "Button"
+   },
+   {
+    "name": "TextTitle",
+    "type": "WText"
+   },
+   {
+    "name": "TipsText",
+    "type": "WText"
+   }
+  ],
+  "SDCTaskItem_SubTaskCell": [
+   {
+    "name": "DescText",
+    "type": "WText"
+   }
+  ],
+  "TeamLobbyWindow": [
+   {
+    "name": "PanelTrans",
+    "type": "RectTransform"
+   }
+  ],
+  "TeamTaskWindow": [
+   {
+    "name": "BtnClose",
+    "type": "Button"
+   },
+   {
+    "name": "ClickSign",
+    "type": "Button"
+   },
+   {
+    "name": "ClickSigned",
+    "type": "RectTransform"
+   }
+  ],
+  "TeamTaskWindow_Cell": [
+   {
+    "name": "ClickGet",
+    "type": "Button"
+   },
+   {
+    "name": "ClickGo",
+    "type": "Button"
+   },
+   {
+    "name": "Finished",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Gou",
+    "type": "RectTransform"
+   },
+   {
+    "name": "ItemNum_1",
+    "type": "WText"
+   },
+   {
+    "name": "ItemNum_2",
+    "type": "WText"
+   },
+   {
+    "name": "ItemNum_3",
+    "type": "WText"
+   },
+   {
+    "name": "Progress",
+    "type": "WText"
+   }
+  ],
+  "UIDailyTask": [
+   {
+    "name": "ReceiveBtn",
+    "type": "WButton"
+   },
+   {
+    "name": "Slider",
+    "type": "Slider"
+   },
+   {
+    "name": "Text_TodayNumber",
+    "type": "WText"
+   }
+  ],
+  "UIDailyTaskPreview": [
+   {
+    "name": "BtnClose",
+    "type": "Button"
+   }
+  ],
+  "UIDailyTaskPreview_RewardItem": [
+   {
+    "name": "Text_Progress",
+    "type": "WText"
+   }
+  ],
+  "UIDailyTask_HeroLimitTaskInfoItem": [
+   {
+    "name": "Button_Go",
+    "type": "Button"
+   },
+   {
+    "name": "Button_Receive",
+    "type": "Button"
+   },
+   {
+    "name": "Desc",
+    "type": "WText"
+   },
+   {
+    "name": "RemainTime",
+    "type": "WText"
+   },
+   {
+    "name": "TaskSlider",
+    "type": "Slider"
+   },
+   {
+    "name": "Text_Desc",
+    "type": "WText"
+   },
+   {
+    "name": "Text_YellowDesc",
+    "type": "WText"
+   },
+   {
+    "name": "TxTaskProgress",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_IconNumber",
+    "type": "WText"
+   }
+  ],
+  "UIDailyTask_LimitContent": [
+   {
+    "name": "ClickArea",
+    "type": "WButton"
+   }
+  ],
+  "UIDailyTask_TaskInfoItem": [
+   {
+    "name": "Button_Go",
+    "type": "Button"
+   },
+   {
+    "name": "TaskSlider",
+    "type": "Slider"
+   },
+   {
+    "name": "Text_Desc",
+    "type": "WText"
+   },
+   {
+    "name": "TxTaskProgress",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_IconNumber",
+    "type": "WText"
+   }
+  ],
+  "UIHeroSkinShopMB_New_GoodItemCell": [
+   {
+    "name": "BtnHeroIcon",
+    "type": "Button"
+   },
+   {
+    "name": "Button3_Red_AdditionalCost",
+    "type": "Button"
+   },
+   {
+    "name": "Button3_Red_Goto",
+    "type": "Button"
+   },
+   {
+    "name": "Button3_Red_Purchase",
+    "type": "Button"
+   },
+   {
+    "name": "TxLabel",
+    "type": "WText"
+   },
+   {
+    "name": "TxName1",
+    "type": "WText"
+   },
+   {
+    "name": "TxName2",
+    "type": "WText"
+   },
+   {
+    "name": "TxOriNum_Gray_Lock",
+    "type": "WText"
+   },
+   {
+    "name": "TxOriNum_Red_Purchase",
+    "type": "WText"
+   },
+   {
+    "name": "TxtDiscunt",
+    "type": "WText"
+   },
+   {
+    "name": "TxtEndTime",
+    "type": "WText"
+   },
+   {
+    "name": "TxtLimitTime",
+    "type": "WText"
+   },
+   {
+    "name": "TxtSellPrice_Gray_Lock",
+    "type": "WText"
+   },
+   {
+    "name": "TxtSellPrice_Red_AdditionalCost",
+    "type": "WText"
+   },
+   {
+    "name": "TxtSellPrice_Red_Purchase",
+    "type": "WText"
+   }
+  ],
+  "UIHeroSkinShopMB_New_TabItem_TopSub": [
+   {
+    "name": "ButtonFunc",
+    "type": "Button"
+   },
+   {
+    "name": "TextTabName_NodeHighLight",
+    "type": "WText"
+   },
+   {
+    "name": "TextTabName_NodeNormal",
+    "type": "WText"
+   }
+  ],
+  "UILobby_CarList": [
+   {
+    "name": "Arrow",
+    "type": "RectTransform"
+   },
+   {
+    "name": "BtnAskList",
+    "type": "Button"
+   },
+   {
+    "name": "BtnBlacklist",
+    "type": "Button"
+   },
+   {
+    "name": "BtnClose",
+    "type": "Button"
+   },
+   {
+    "name": "BtnClose1",
+    "type": "WButton"
+   },
+   {
+    "name": "ButtonText_Time",
+    "type": "WText"
+   },
+   {
+    "name": "Button_Refresh",
+    "type": "WButton"
+   },
+   {
+    "name": "Button_Time",
+    "type": "RectTransform"
+   }
+  ],
+  "UILobby_HallGlory": [
+   {
+    "name": "MoreArrowRoot",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Obj_Up",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Text_Empty",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Name_List",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Name_Top1",
+    "type": "WText"
+   },
+   {
+    "name": "Text_PeakRank_List",
+    "type": "WText"
+   },
+   {
+    "name": "Text_PeakRank_Top1",
+    "type": "WText"
+   },
+   {
+    "name": "Top1Button",
+    "type": "Button"
+   },
+   {
+    "name": "Top1Card",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Top1HeadRoot",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Top1NameText",
+    "type": "WText"
+   },
+   {
+    "name": "Top1RankIcon",
+    "type": "WImage"
+   },
+   {
+    "name": "Top1RankText",
+    "type": "WText"
+   },
+   {
+    "name": "Top1ScoreRoot",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Top1ScoreText",
+    "type": "WText"
+   },
+   {
+    "name": "Top2Button",
+    "type": "Button"
+   },
+   {
+    "name": "Top2Card",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Top2HeadRoot",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Top2NameText",
+    "type": "WText"
+   },
+   {
+    "name": "Top2RankIcon",
+    "type": "WImage"
+   },
+   {
+    "name": "Top2RankText",
+    "type": "WText"
+   },
+   {
+    "name": "Top2ScoreRoot",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Top2ScoreText",
+    "type": "WText"
+   },
+   {
+    "name": "Top3Button",
+    "type": "Button"
+   },
+   {
+    "name": "Top3Card",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Top3HeadRoot",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Top3NameText",
+    "type": "WText"
+   },
+   {
+    "name": "Top3RankIcon",
+    "type": "WImage"
+   },
+   {
+    "name": "Top3RankText",
+    "type": "WText"
+   },
+   {
+    "name": "Top3ScoreRoot",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Top3ScoreText",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_Num_List",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_Num_Top1",
+    "type": "WText"
+   }
+  ],
+  "UILobby_HallGlory_HonorCell": [
+   {
+    "name": "Button",
+    "type": "WButton"
+   },
+   {
+    "name": "HeadBg",
+    "type": "WImage"
+   },
+   {
+    "name": "HeadRoot",
+    "type": "RectTransform"
+   },
+   {
+    "name": "NameText",
+    "type": "WText"
+   },
+   {
+    "name": "RankIcon",
+    "type": "WImage"
+   },
+   {
+    "name": "RankText",
+    "type": "WText"
+   },
+   {
+    "name": "ScoreIcon",
+    "type": "WImage"
+   },
+   {
+    "name": "ScoreText",
+    "type": "WText"
+   }
+  ],
+  "UILobby_MBPlayerListInfoNew": [
+   {
+    "name": "BtnAskList",
+    "type": "Button"
+   },
+   {
+    "name": "BtnBlacklist",
+    "type": "Button"
+   },
+   {
+    "name": "BtnClear",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnClose",
+    "type": "Button"
+   },
+   {
+    "name": "BtnClose1",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnSearch",
+    "type": "WButton"
+   },
+   {
+    "name": "Input",
+    "type": "InputField"
+   },
+   {
+    "name": "OptionTrans",
+    "type": "RectTransform"
+   },
+   {
+    "name": "TxOnLinePerson",
+    "type": "WText"
+   }
+  ],
+  "UIMainCity2DView": [
+   {
+    "name": "BattlePassEffectRoot",
+    "type": "RectTransform"
+   },
+   {
+    "name": "BattlePassEffectRoot2",
+    "type": "RectTransform"
+   },
+   {
+    "name": "BattlePassMoveEffect",
+    "type": "RectTransform"
+   },
+   {
+    "name": "BattlePassMoveEndRoot",
+    "type": "RectTransform"
+   },
+   {
+    "name": "BattlePassMoveStartRoot",
+    "type": "RectTransform"
+   },
+   {
+    "name": "BtnClub",
+    "type": "Button"
+   },
+   {
+    "name": "BtnLimitStore",
+    "type": "Button"
+   },
+   {
+    "name": "BtnOpenSchool",
+    "type": "Button"
+   },
+   {
+    "name": "BtnRankList",
+    "type": "RectTransform"
+   },
+   {
+    "name": "BtnRoleBag",
+    "type": "Button"
+   },
+   {
+    "name": "BtnRotateHero",
+    "type": "WButton"
+   },
+   {
+    "name": "BtnTask",
+    "type": "Button"
+   },
+   {
+    "name": "BtnWatching",
+    "type": "Button"
+   },
+   {
+    "name": "Btn_AdventureGift",
+    "type": "WButton"
+   },
+   {
+    "name": "Btn_Screen",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Btn_Trial",
+    "type": "WButton"
+   },
+   {
+    "name": "Bubble_IconNumber",
+    "type": "WText"
+   },
+   {
+    "name": "ButtomTeam",
+    "type": "Button"
+   },
+   {
+    "name": "ButtonBubble",
+    "type": "WButton"
+   },
+   {
+    "name": "ButtonRankIcon",
+    "type": "WButton"
+   },
+   {
+    "name": "Button_Achieve",
+    "type": "WButton"
+   },
+   {
+    "name": "Button_CarClick",
+    "type": "WButton"
+   },
+   {
+    "name": "FriendTrans",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Image_Result_Txt",
+    "type": "WText"
+   },
+   {
+    "name": "Image_TipsDi",
+    "type": "RectTransform"
+   },
+   {
+    "name": "JLevelEffectRoot",
+    "type": "RectTransform"
+   },
+   {
+    "name": "JLevelMoveEffect",
+    "type": "RectTransform"
+   },
+   {
+    "name": "JlevelMoveEndRoot",
+    "type": "RectTransform"
+   },
+   {
+    "name": "JlevelMoveStartRoot",
+    "type": "RectTransform"
+   },
+   {
+    "name": "LeisureBtnTask",
+    "type": "WButton"
+   },
+   {
+    "name": "Leisure_Text_Number",
+    "type": "WText"
+   },
+   {
+    "name": "MonthCardEntryButton",
+    "type": "Button"
+   },
+   {
+    "name": "NewWorld",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Obj_Slider",
+    "type": "Slider"
+   },
+   {
+    "name": "RankBtnTask",
+    "type": "WButton"
+   },
+   {
+    "name": "RankName",
+    "type": "WText"
+   },
+   {
+    "name": "RoleImageMaskButton",
+    "type": "WButton"
+   },
+   {
+    "name": "Slider",
+    "type": "Slider"
+   },
+   {
+    "name": "SwitchButton",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Text_Bubble",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Number",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Time",
+    "type": "WText"
+   },
+   {
+    "name": "Text_TipsTime",
+    "type": "WText"
+   },
+   {
+    "name": "TxPlayerLevel",
+    "type": "WText"
+   },
+   {
+    "name": "TxPlayerName",
+    "type": "WText"
+   },
+   {
+    "name": "TxtEntertainmentCountdown",
+    "type": "WText"
+   },
+   {
+    "name": "TxtTrialName",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_AdventureGiftTime",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_HeroReturn",
+    "type": "WText"
+   },
+   {
+    "name": "Txt_Slider",
+    "type": "WText"
+   },
+   {
+    "name": "VictorNumTipsBtn",
+    "type": "WButton"
+   },
+   {
+    "name": "VictorNumTipsBtn2",
+    "type": "WButton"
+   },
+   {
+    "name": "VictorNumTipsMask",
+    "type": "WButton"
+   }
+  ],
+  "UIMainCity2DView_MonthPanel": [
+   {
+    "name": "ForeverCardButton",
+    "type": "WButton"
+   },
+   {
+    "name": "GoToBuyButton",
+    "type": "Button"
+   },
+   {
+    "name": "MonthCardButton",
+    "type": "WButton"
+   },
+   {
+    "name": "TipsMaskButton",
+    "type": "WButton"
+   }
+  ],
+  "UIMainCity2DView_MonthPanel_PrivilegeCell": [
+   {
+    "name": "Text",
+    "type": "WText"
+   }
+  ],
+  "UIMainCity2D_ChallengeEntry": [
+   {
+    "name": "ButtonActivityCompetition",
+    "type": "WButton"
+   },
+   {
+    "name": "Text_Name",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Time",
+    "type": "WText"
+   }
+  ],
+  "UIMainCity2D_SDC": [
+   {
+    "name": "Button",
+    "type": "WButton"
+   },
+   {
+    "name": "Text_Name",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Time",
+    "type": "WText"
+   }
+  ],
+  "UIMBConvene": [
+   {
+    "name": "ActivityMode",
+    "type": "WText"
+   },
+   {
+    "name": "ActivityName",
+    "type": "WText"
+   },
+   {
+    "name": "ActivityStage",
+    "type": "WText"
+   },
+   {
+    "name": "Arrow",
+    "type": "RectTransform"
+   },
+   {
+    "name": "ChatInput",
+    "type": "InputField"
+   }
+  ],
+  "UIPlayerInfoEdit": [
+   {
+    "name": "RightPanelTrans",
+    "type": "RectTransform"
+   }
+  ],
+  "UIPlayerInfoTipsNew": [
+   {
+    "name": "BtnClose",
+    "type": "Button"
+   },
+   {
+    "name": "ItemTrans",
+    "type": "RectTransform"
+   }
+  ],
+  "UISDCAwardWindow": [
+   {
+    "name": "BtnClose",
+    "type": "Button"
+   },
+   {
+    "name": "FinalTitle",
+    "type": "WText"
+   },
+   {
+    "name": "RandomTitle",
+    "type": "WText"
+   },
+   {
+    "name": "TxTitle",
+    "type": "WText"
+   }
+  ],
+  "UISDCBagWindow": [
+   {
+    "name": "ButtonAwakeText",
+    "type": "WText"
+   },
+   {
+    "name": "ButtonGoText",
+    "type": "WText"
+   },
+   {
+    "name": "Button_Awake",
+    "type": "Button"
+   },
+   {
+    "name": "Button_Go",
+    "type": "Button"
+   },
+   {
+    "name": "FirstAwardButton",
+    "type": "Button"
+   },
+   {
+    "name": "FirstAwardTxtNum",
+    "type": "WText"
+   },
+   {
+    "name": "wbtn_Item",
+    "type": "WButton"
+   },
+   {
+    "name": "wtxt_AwakeTime",
+    "type": "WText"
+   },
+   {
+    "name": "wtxt_Award",
+    "type": "WText"
+   },
+   {
+    "name": "wtxt_Details",
+    "type": "WText"
+   },
+   {
+    "name": "wtxt_HaveNum",
+    "type": "WText"
+   },
+   {
+    "name": "wtxt_ItemDesc",
+    "type": "WText"
+   },
+   {
+    "name": "wtxt_Name",
+    "type": "WText"
+   },
+   {
+    "name": "wtxt_activateNum",
+    "type": "WText"
+   }
+  ],
+  "UISDCBagWindow_ItemList_Cell": [
+   {
+    "name": "Button",
+    "type": "Button"
+   },
+   {
+    "name": "TxtNum",
+    "type": "WText"
+   }
+  ],
+  "UISDCBaseWindow": [
+   {
+    "name": "BattlePackClick",
+    "type": "WButton"
+   },
+   {
+    "name": "BattlePackHelpClick",
+    "type": "Button"
+   },
+   {
+    "name": "BattlePackLevel",
+    "type": "WText"
+   },
+   {
+    "name": "BattlePackUpdate",
+    "type": "WButton"
+   },
+   {
+    "name": "BattlePackUpgradeArea",
+    "type": "WButton"
+   },
+   {
+    "name": "CraftAmplifierCancel",
+    "type": "WButton"
+   },
+   {
+    "name": "CraftAmplifierClick",
+    "type": "WButton"
+   },
+   {
+    "name": "CraftAmplifierGet",
+    "type": "Button"
+   },
+   {
+    "name": "CraftAmplifierHelpClick",
+    "type": "Button"
+   },
+   {
+    "name": "CraftAmplifierIcon",
+    "type": "WImage"
+   },
+   {
+    "name": "CraftAmplifierLevel",
+    "type": "WText"
+   },
+   {
+    "name": "CraftAmplifierState",
+    "type": "WText"
+   },
+   {
+    "name": "CraftAmplifierTime",
+    "type": "WText"
+   },
+   {
+    "name": "CraftAmplifierUpdate",
+    "type": "WButton"
+   },
+   {
+    "name": "CraftAmplifierUpgradeArea",
+    "type": "WButton"
+   },
+   {
+    "name": "CraftArmorCancel",
+    "type": "WButton"
+   },
+   {
+    "name": "CraftArmorClick",
+    "type": "WButton"
+   },
+   {
+    "name": "CraftArmorGet",
+    "type": "Button"
+   },
+   {
+    "name": "CraftArmorHelpClick",
+    "type": "Button"
+   },
+   {
+    "name": "CraftArmorIcon",
+    "type": "WImage"
+   },
+   {
+    "name": "CraftArmorLevel",
+    "type": "WText"
+   },
+   {
+    "name": "CraftArmorState",
+    "type": "WText"
+   },
+   {
+    "name": "CraftArmorTime",
+    "type": "WText"
+   },
+   {
+    "name": "CraftArmorUpdate",
+    "type": "WButton"
+   },
+   {
+    "name": "CraftArmorUpgradeArea",
+    "type": "WButton"
+   },
+   {
+    "name": "CraftChipCancel",
+    "type": "WButton"
+   },
+   {
+    "name": "CraftChipClick",
+    "type": "WButton"
+   },
+   {
+    "name": "CraftChipGet",
+    "type": "Button"
+   },
+   {
+    "name": "CraftChipHelpClick",
+    "type": "Button"
+   },
+   {
+    "name": "CraftChipIcon",
+    "type": "WImage"
+   },
+   {
+    "name": "CraftChipLevel",
+    "type": "WText"
+   },
+   {
+    "name": "CraftChipState",
+    "type": "WText"
+   },
+   {
+    "name": "CraftChipTime",
+    "type": "WText"
+   },
+   {
+    "name": "CraftChipUpdate",
+    "type": "WButton"
+   },
+   {
+    "name": "CraftChipUpgradeArea",
+    "type": "WButton"
+   },
+   {
+    "name": "CraftConsumableCancel",
+    "type": "WButton"
+   },
+   {
+    "name": "CraftConsumableClick",
+    "type": "WButton"
+   },
+   {
+    "name": "CraftConsumableGet",
+    "type": "Button"
+   },
+   {
+    "name": "CraftConsumableHelpClick",
+    "type": "Button"
+   },
+   {
+    "name": "CraftConsumableIcon",
+    "type": "WImage"
+   },
+   {
+    "name": "CraftConsumableLevel",
+    "type": "WText"
+   },
+   {
+    "name": "CraftConsumableState",
+    "type": "WText"
+   },
+   {
+    "name": "CraftConsumableTime",
+    "type": "WText"
+   },
+   {
+    "name": "CraftConsumableUpdate",
+    "type": "WButton"
+   },
+   {
+    "name": "CraftConsumableUpgradeArea",
+    "type": "WButton"
+   },
+   {
+    "name": "ShopClick",
+    "type": "WButton"
+   },
+   {
+    "name": "ShopHelpClick",
+    "type": "Button"
+   },
+   {
+    "name": "ShopLevel",
+    "type": "WText"
+   },
+   {
+    "name": "ShopUpdate",
+    "type": "WButton"
+   },
+   {
+    "name": "ShopUpgradeArea",
+    "type": "WButton"
+   },
+   {
+    "name": "WarehouseClick",
+    "type": "WButton"
+   },
+   {
+    "name": "WarehouseHelpClick",
+    "type": "Button"
+   },
+   {
+    "name": "WarehouseLevel",
+    "type": "WText"
+   },
+   {
+    "name": "WarehouseUpdate",
+    "type": "WButton"
+   },
+   {
+    "name": "WarehouseUpgradeArea",
+    "type": "WButton"
+   }
+  ],
+  "UISDCBattleResult": [
+   {
+    "name": "AddLevelNum",
+    "type": "WText"
+   },
+   {
+    "name": "AwakeNum",
+    "type": "WText"
+   },
+   {
+    "name": "BackTimeNum",
+    "type": "WText"
+   },
+   {
+    "name": "BackTips",
+    "type": "WText"
+   },
+   {
+    "name": "BtnClose",
+    "type": "WButton"
+   },
+   {
+    "name": "Btn_Click",
+    "type": "WButton"
+   },
+   {
+    "name": "Img_BackDI",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Img_BackFaillDI",
+    "type": "RectTransform"
+   },
+   {
+    "name": "KillMonsterrNum",
+    "type": "WText"
+   },
+   {
+    "name": "KillPlayerNum",
+    "type": "WText"
+   },
+   {
+    "name": "MiddleSeasonValueNum",
+    "type": "WText"
+   },
+   {
+    "name": "MiddleValueNum",
+    "type": "WText"
+   },
+   {
+    "name": "MiddleValueTitle",
+    "type": "WText"
+   },
+   {
+    "name": "RightScoreNum",
+    "type": "WText"
+   },
+   {
+    "name": "SDCNum_Left",
+    "type": "WText"
+   },
+   {
+    "name": "TalentNum",
+    "type": "WText"
+   },
+   {
+    "name": "TextLevelInfo",
+    "type": "WText"
+   },
+   {
+    "name": "TxtLevel",
+    "type": "WText"
+   },
+   {
+    "name": "wbtn_Put",
+    "type": "WButton"
+   }
+  ],
+  "UISDCBattleResult_Middle_Obj_Item": [
+   {
+    "name": "Btn_Click",
+    "type": "WButton"
+   }
+  ],
+  "UISDCBoxAwardWindow": [
+   {
+    "name": "ButtonText",
+    "type": "WText"
+   },
+   {
+    "name": "Button_Continue",
+    "type": "Button"
+   },
+   {
+    "name": "wtxt_Title",
+    "type": "WText"
+   }
+  ],
+  "UISDCChangeNameWindow": [
+   {
+    "name": "BtnCancel",
+    "type": "Button"
+   },
+   {
+    "name": "BtnClose",
+    "type": "Button"
+   },
+   {
+    "name": "BtnSure",
+    "type": "Button"
+   },
+   {
+    "name": "InputField",
+    "type": "InputField"
+   }
+  ],
+  "UISDCCollectWindow": [
+   {
+    "name": "wbtn_Box",
+    "type": "WButton"
+   },
+   {
+    "name": "wbtn_Comic",
+    "type": "WButton"
+   },
+   {
+    "name": "wtxt_Awake",
+    "type": "WText"
+   },
+   {
+    "name": "wtxt_AwakeNum",
+    "type": "WText"
+   }
+  ],
+  "UISDCComicWindow": [
+   {
+    "name": "LeftLocation",
+    "type": "WButton"
+   },
+   {
+    "name": "RightLocation",
+    "type": "WButton"
+   },
+   {
+    "name": "wbtn_Click",
+    "type": "WButton"
+   },
+   {
+    "name": "wtxt_Collect",
+    "type": "WText"
+   }
+  ],
+  "UISDCComicWindow_ComicList_Cell": [
+   {
+    "name": "ButtonFunc",
+    "type": "Button"
+   },
+   {
+    "name": "TextTabName",
+    "type": "WText"
+   }
+  ],
+  "UISDCComicWindow_ContentList_Cell": [
+   {
+    "name": "ButtonFunc",
+    "type": "Button"
+   },
+   {
+    "name": "wtxt_AwakeTime",
+    "type": "WText"
+   }
+  ],
+  "UISDCHistorySeasonWindow": [
+   {
+    "name": "AllNum",
+    "type": "WText"
+   },
+   {
+    "name": "AverageHurtNum",
+    "type": "WText"
+   },
+   {
+    "name": "BigBackNum",
+    "type": "WText"
+   },
+   {
+    "name": "BigBattleNum",
+    "type": "WText"
+   },
+   {
+    "name": "BigOutNum",
+    "type": "WText"
+   },
+   {
+    "name": "HurtNum",
+    "type": "WText"
+   },
+   {
+    "name": "OutNum",
+    "type": "WText"
+   },
+   {
+    "name": "RankName",
+    "type": "WText"
+   },
+   {
+    "name": "SingleAverageNum",
+    "type": "WText"
+   },
+   {
+    "name": "SingleHighNum",
+    "type": "WText"
+   },
+   {
+    "name": "SingleLiveNum",
+    "type": "WText"
+   },
+   {
+    "name": "StarNum",
+    "type": "WText"
+   }
+  ],
+  "UISDCHistorySeasonWindow_Cell": [
+   {
+    "name": "Button",
+    "type": "WButton"
+   },
+   {
+    "name": "Season",
+    "type": "WText"
+   },
+   {
+    "name": "SelectName",
+    "type": "WText"
+   },
+   {
+    "name": "SelectRoot",
+    "type": "WImage"
+   },
+   {
+    "name": "SelectStarNum",
+    "type": "WText"
+   },
+   {
+    "name": "SelectStarRoot",
+    "type": "WImage"
+   },
+   {
+    "name": "Time",
+    "type": "WText"
+   },
+   {
+    "name": "UnselectName",
+    "type": "WText"
+   },
+   {
+    "name": "UnselectRoot",
+    "type": "WImage"
+   },
+   {
+    "name": "UnselectStarNum",
+    "type": "WText"
+   },
+   {
+    "name": "UnselectStarRoot",
+    "type": "WImage"
+   }
+  ],
+  "UISDCMadeWindow": [
+   {
+    "name": "BtnMade",
+    "type": "Button"
+   },
+   {
+    "name": "ConsumeText",
+    "type": "WText"
+   },
+   {
+    "name": "DetailContent",
+    "type": "RectTransform"
+   },
+   {
+    "name": "TimeText",
+    "type": "WText"
+   },
+   {
+    "name": "TxTips",
+    "type": "WText"
+   },
+   {
+    "name": "UseText",
+    "type": "WText"
+   }
+  ],
+  "UISDCMadeWindow_ItemAffix": [
+   {
+    "name": "BtnHelp",
+    "type": "Button"
+   }
+  ],
+  "UISDCMadeWindow_ItemList_Cell": [
+   {
+    "name": "Button",
+    "type": "Button"
+   },
+   {
+    "name": "TxtNum",
+    "type": "WText"
+   },
+   {
+    "name": "wimg_Mask",
+    "type": "WImage"
+   },
+   {
+    "name": "wtxt_Name",
+    "type": "WText"
+   },
+   {
+    "name": "wtxt_UnLock",
+    "type": "WText"
+   }
+  ],
+  "UISDCMadeWindow_ItemTop": [
+   {
+    "name": "Text_Detail",
+    "type": "WText"
+   },
+   {
+    "name": "Text_DetailNum",
+    "type": "WText"
+   },
+   {
+    "name": "TxItemName",
+    "type": "WText"
+   },
+   {
+    "name": "TxNumber",
+    "type": "WText"
+   }
+  ],
+  "UISDCMainWindow": [
+   {
+    "name": "OpenHistrySeasonButton",
+    "type": "Button"
+   },
+   {
+    "name": "OpenRankButton",
+    "type": "Button"
+   },
+   {
+    "name": "OpenSeasonStoreButton",
+    "type": "WButton"
+   },
+   {
+    "name": "RankRewardButton",
+    "type": "WButton"
+   },
+   {
+    "name": "RankRewardDescText",
+    "type": "WText"
+   },
+   {
+    "name": "RankRewardItemButton",
+    "type": "Button"
+   },
+   {
+    "name": "RankRewardItemNumText",
+    "type": "WText"
+   },
+   {
+    "name": "SeasonChangeContinueButton",
+    "type": "WButton"
+   },
+   {
+    "name": "SeasonChangeCountdownText",
+    "type": "WText"
+   },
+   {
+    "name": "SeasonChangeTitleText",
+    "type": "WText"
+   },
+   {
+    "name": "SeasonCountdownTimeText",
+    "type": "WText"
+   },
+   {
+    "name": "SeasonGameNumberText",
+    "type": "WText"
+   },
+   {
+    "name": "SeasonKillNumberText",
+    "type": "WText"
+   },
+   {
+    "name": "SeasonNumberText",
+    "type": "WText"
+   },
+   {
+    "name": "SeasonWinRateText",
+    "type": "WText"
+   }
+  ],
+  "UISDCMainWindow_ImgGridingIcon": [
+   {
+    "name": "ExpandHelpButton",
+    "type": "WButton"
+   }
+  ],
+  "UISDCMainWindow_NodeGriding": [
+   {
+    "name": "RankHelpButton",
+    "type": "Button"
+   },
+   {
+    "name": "RankNameText",
+    "type": "WText"
+   },
+   {
+    "name": "RankStartCountText",
+    "type": "WText"
+   },
+   {
+    "name": "ScoreFillImage",
+    "type": "WImage"
+   },
+   {
+    "name": "ScoreText",
+    "type": "WText"
+   }
+  ],
+  "UISDCModUpgradeWindow": [
+   {
+    "name": "BtnCancel",
+    "type": "Button"
+   },
+   {
+    "name": "BtnClose",
+    "type": "Button"
+   },
+   {
+    "name": "BtnConfirm",
+    "type": "Button"
+   },
+   {
+    "name": "CondLevel",
+    "type": "WText"
+   },
+   {
+    "name": "CondReq",
+    "type": "WText"
+   },
+   {
+    "name": "ConsumeItemRoot",
+    "type": "RectTransform"
+   },
+   {
+    "name": "ConsumeText",
+    "type": "WText"
+   },
+   {
+    "name": "CurrentInfo",
+    "type": "WText"
+   },
+   {
+    "name": "EffectDesc",
+    "type": "WText"
+   },
+   {
+    "name": "NextInfo",
+    "type": "WText"
+   },
+   {
+    "name": "PreviewClick",
+    "type": "Button"
+   },
+   {
+    "name": "TxTitle",
+    "type": "WText"
+   }
+  ],
+  "UISDCPreAssemblyWindow": [
+   {
+    "name": "AmplifierSlotTrans",
+    "type": "RectTransform"
+   },
+   {
+    "name": "BuyFillCostText",
+    "type": "WText"
+   },
+   {
+    "name": "ChipSlotTrans",
+    "type": "RectTransform"
+   },
+   {
+    "name": "EquipTrans",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Text_AmplifierNum",
+    "type": "WText"
+   },
+   {
+    "name": "Text_DrugNum",
+    "type": "WText"
+   },
+   {
+    "name": "Text_KeyNum",
+    "type": "WText"
+   }
+  ],
+  "UISDCPresetWindow": [
+   {
+    "name": "Content",
+    "type": "RectTransform"
+   }
+  ],
+  "UISDCPresetWindow_ItemCell": [
+   {
+    "name": "SelectButton",
+    "type": "Button"
+   },
+   {
+    "name": "wtxt_Name",
+    "type": "WText"
+   },
+   {
+    "name": "wtxt_Num",
+    "type": "WText"
+   }
+  ],
+  "UISDCResultNum": [
+   {
+    "name": "Btn_Click",
+    "type": "WButton"
+   },
+   {
+    "name": "CommonBarTrans",
+    "type": "RectTransform"
+   },
+   {
+    "name": "TeamTrans",
+    "type": "RectTransform"
+   }
+  ],
+  "UISDCResultNum_TeamDetailItem": [
+   {
+    "name": "AttackTime",
+    "type": "WText"
+   },
+   {
+    "name": "BackTime",
+    "type": "WText"
+   },
+   {
+    "name": "ClickFriend",
+    "type": "WButton"
+   },
+   {
+    "name": "ClickFriendGray",
+    "type": "RectTransform"
+   },
+   {
+    "name": "ClickLike",
+    "type": "WButton"
+   },
+   {
+    "name": "ClickRefuse",
+    "type": "WButton"
+   },
+   {
+    "name": "ClickRefuseGray",
+    "type": "RectTransform"
+   },
+   {
+    "name": "ClickReport",
+    "type": "WButton"
+   },
+   {
+    "name": "ClickReportGray",
+    "type": "RectTransform"
+   },
+   {
+    "name": "HelpTime",
+    "type": "WText"
+   },
+   {
+    "name": "IncomeTime",
+    "type": "WText"
+   },
+   {
+    "name": "LikeEffectRoot",
+    "type": "RectTransform"
+   },
+   {
+    "name": "NoneBack",
+    "type": "WText"
+   },
+   {
+    "name": "PlayerName",
+    "type": "WText"
+   },
+   {
+    "name": "RescueTime",
+    "type": "WText"
+   },
+   {
+    "name": "TextBeLikeNum",
+    "type": "WText"
+   },
+   {
+    "name": "TextEachLikeNum",
+    "type": "WText"
+   },
+   {
+    "name": "TextLikeNum_Light",
+    "type": "WText"
+   }
+  ],
+  "UISDCSavePlanWindow": [
+   {
+    "name": "BtnCancel",
+    "type": "Button"
+   },
+   {
+    "name": "BtnClose",
+    "type": "Button"
+   },
+   {
+    "name": "BtnSure",
+    "type": "Button"
+   }
+  ],
+  "UISDCSavePlanWindow_obj_Cell": [
+   {
+    "name": "wbtn_Click",
+    "type": "WButton"
+   },
+   {
+    "name": "wimg_Edit",
+    "type": "WButton"
+   },
+   {
+    "name": "wimg_Select",
+    "type": "WImage"
+   },
+   {
+    "name": "wtxt_Desc",
+    "type": "WText"
+   }
+  ],
+  "UISDCSeasonRank_Cell": [
+   {
+    "name": "CellButton",
+    "type": "WButton"
+   },
+   {
+    "name": "RankLevelNameText",
+    "type": "WText"
+   }
+  ],
+  "UISDCSeasonRank_SubCell": [
+   {
+    "name": "SubRankLevelIconImage",
+    "type": "WImage"
+   },
+   {
+    "name": "SubRankLevelNameText",
+    "type": "WText"
+   },
+   {
+    "name": "SubRankLevelScoreText",
+    "type": "WText"
+   }
+  ],
+  "UISDCSeasonReward": [
+   {
+    "name": "SeasonNum",
+    "type": "WText"
+   }
+  ],
+  "UISDCSeasonReward_Item": [
+   {
+    "name": "ItemNum",
+    "type": "WText"
+   },
+   {
+    "name": "RewardItemButton",
+    "type": "Button"
+   },
+   {
+    "name": "TxStarNum",
+    "type": "WText"
+   },
+   {
+    "name": "TxtLevel",
+    "type": "WText"
+   }
+  ],
+  "UISDCSettlement": [
+   {
+    "name": "ContinueButton",
+    "type": "WButton"
+   },
+   {
+    "name": "DropTxt",
+    "type": "WText"
+   },
+   {
+    "name": "ShareButton",
+    "type": "WButton"
+   }
+  ],
+  "UISDCSettlement_NodeGriding": [
+   {
+    "name": "AddRankScoreText",
+    "type": "WText"
+   },
+   {
+    "name": "RankNameText",
+    "type": "WText"
+   },
+   {
+    "name": "RankScoreText",
+    "type": "WText"
+   },
+   {
+    "name": "RankStartText",
+    "type": "WText"
+   }
+  ],
+  "UISDCStoreWindow_ItemCell": [
+   {
+    "name": "ClickButton",
+    "type": "Button"
+   },
+   {
+    "name": "LimitText",
+    "type": "WText"
+   },
+   {
+    "name": "MaskText",
+    "type": "WText"
+   },
+   {
+    "name": "NameText",
+    "type": "WText"
+   },
+   {
+    "name": "PriceText",
+    "type": "WText"
+   },
+   {
+    "name": "TipsButton",
+    "type": "Button"
+   },
+   {
+    "name": "TxtDiscount",
+    "type": "WText"
+   },
+   {
+    "name": "TxtNum",
+    "type": "WText"
+   }
+  ],
+  "UISDCSuitWindow": [
+   {
+    "name": "SuitTicketCountText1",
+    "type": "WText"
+   },
+   {
+    "name": "SuitTicketCountText2",
+    "type": "WText"
+   },
+   {
+    "name": "SuitTicketCountText3",
+    "type": "WText"
+   },
+   {
+    "name": "SuitTicketHaveText",
+    "type": "WText"
+   },
+   {
+    "name": "SuitTicketLimitTipButton",
+    "type": "Button"
+   },
+   {
+    "name": "TimeTipButton",
+    "type": "Button"
+   }
+  ],
+  "UISDCSuitWindow_Cell": [
+   {
+    "name": "PlanNameText",
+    "type": "WText"
+   },
+   {
+    "name": "RefreshButton",
+    "type": "WButton"
+   },
+   {
+    "name": "RefreshCostText",
+    "type": "WText"
+   },
+   {
+    "name": "ShowValueText",
+    "type": "WText"
+   },
+   {
+    "name": "UseButton",
+    "type": "Button"
+   },
+   {
+    "name": "UseCostText",
+    "type": "WText"
+   }
+  ],
+  "UISDCUpgradePreviewWindow": [
+   {
+    "name": "BtnClose",
+    "type": "Button"
+   },
+   {
+    "name": "TxTitle",
+    "type": "WText"
+   }
+  ],
+  "UISDCUpgradePreviewWindow_LevelList_Cell": [
+   {
+    "name": "LevelText",
+    "type": "WText"
+   },
+   {
+    "name": "PreviewText",
+    "type": "WText"
+   },
+   {
+    "name": "PreviewTextRoot",
+    "type": "RectTransform"
+   }
+  ],
+  "UISeasonChangeRankNew": [
+   {
+    "name": "Txt_Skin",
+    "type": "WText"
+   }
+  ],
+  "UISeasonPeakWindow": [
+   {
+    "name": "MonthlyCurrentRankText",
+    "type": "WText"
+   },
+   {
+    "name": "MonthlyLockRuleText",
+    "type": "WText"
+   },
+   {
+    "name": "MonthlyLockTitleText",
+    "type": "WText"
+   },
+   {
+    "name": "MonthlyProcess",
+    "type": "RectTransform"
+   },
+   {
+    "name": "MonthlyProgressBg",
+    "type": "RectTransform"
+   },
+   {
+    "name": "MonthlyProgressRawImage",
+    "type": "WImage"
+   },
+   {
+    "name": "Obj_Level",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Obj_Rank",
+    "type": "RectTransform"
+   },
+   {
+    "name": "SeasonNum",
+    "type": "WText"
+   },
+   {
+    "name": "SeasonProcess",
+    "type": "RectTransform"
+   },
+   {
+    "name": "SeasonProcessLevelText",
+    "type": "WText"
+   },
+   {
+    "name": "SeasonProcessRankText",
+    "type": "WText"
+   },
+   {
+    "name": "SeasonTxt",
+    "type": "WText"
+   },
+   {
+    "name": "SeasonUsageText",
+    "type": "WText"
+   }
+  ],
+  "UISeasonPeakWindow_MonthlyRewardCell": [
+   {
+    "name": "Btn_Click",
+    "type": "WButton"
+   },
+   {
+    "name": "Image_Claim",
+    "type": "WImage"
+   },
+   {
+    "name": "Image_Item",
+    "type": "WImage"
+   },
+   {
+    "name": "Img_Grey",
+    "type": "WImage"
+   },
+   {
+    "name": "Img_Mask",
+    "type": "WImage"
+   },
+   {
+    "name": "Img_Yellow",
+    "type": "WImage"
+   },
+   {
+    "name": "Obj_Circle",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Obj_Line",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Obj_Recieve",
+    "type": "RectTransform"
+   },
+   {
+    "name": "Text_GreyTitle",
+    "type": "WText"
+   },
+   {
+    "name": "Text_RankName",
+    "type": "WText"
+   },
+   {
+    "name": "Text_YellowTitle",
+    "type": "WText"
+   }
+  ],
+  "UISeasonPeakWindow_SeasonRewardCell": [
+   {
+    "name": "Btn_Click",
+    "type": "WButton"
+   },
+   {
+    "name": "Image_Arrow_1",
+    "type": "WImage"
+   },
+   {
+    "name": "Image_Claim",
+    "type": "WImage"
+   },
+   {
+    "name": "Image_EndYellowLine",
+    "type": "WImage"
+   },
+   {
+    "name": "Image_Item",
+    "type": "WImage"
+   },
+   {
+    "name": "Image_MidYellowLine",
+    "type": "WImage"
+   },
+   {
+    "name": "Image_StartYellowLine",
+    "type": "WImage"
+   },
+   {
+    "name": "Img_Grey",
+    "type": "WImage"
+   },
+   {
+    "name": "Img_Mask",
+    "type": "WImage"
+   },
+   {
+    "name": "Img_Yellow",
+    "type": "WImage"
+   },
+   {
+    "name": "Obj_Recieve",
+    "type": "RectTransform"
+   },
+   {
+    "name": "RewardItemButton",
+    "type": "Button"
+   },
+   {
+    "name": "Text_GreyTitle",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Number",
+    "type": "WText"
+   },
+   {
+    "name": "Text_RankName",
+    "type": "WText"
+   },
+   {
+    "name": "Text_Receive",
+    "type": "WText"
+   },
+   {
+    "name": "Text_YellowTitle",
+    "type": "WText"
+   },
+   {
+    "name": "Widget_Lock",
+    "type": "RectTransform"
+   }
+  ]
+ },
+ "views": [
+  {
+   "class": "SDCBattleResultGainView",
+   "file": "BattleResult/SDCBattleResultGainView.cs"
+  },
+  {
+   "class": "SDCBattleResultRankView",
+   "file": "BattleResult/SDCBattleResultRankView.cs"
+  },
+  {
+   "class": "SDCBattleResultTeamView",
+   "file": "BattleResult/SDCBattleResultTeamView.cs"
+  },
+  {
+   "class": "SDCCodexBagView",
+   "file": "Collection/SDCCodexBagView.cs"
+  },
+  {
+   "class": "SDCCodexIpView",
+   "file": "Collection/SDCCodexIpView.cs"
+  },
+  {
+   "class": "SDCCodexMilestoneRewardView",
+   "file": "Collection/SDCCodexMilestoneRewardView.cs"
+  },
+  {
+   "class": "SDCCodexRewardPreviewView",
+   "file": "Collection/SDCCodexRewardPreviewView.cs"
+  },
+  {
+   "class": "SDCCodexUnlockView",
+   "file": "Collection/SDCCodexUnlockView.cs"
+  },
+  {
+   "class": "SDCCollectionView",
+   "file": "Collection/SDCCollectionView.cs"
+  },
+  {
+   "class": "SDCDef",
+   "file": "Core/SDCDef.cs"
+  },
+  {
+   "class": "SDCManager",
+   "file": "Core/SDCManager.cs"
+  },
+  {
+   "class": "SDCOperationAudio",
+   "file": "Core/SDCOperationAudio.cs"
+  },
+  {
+   "class": "SDCOutBattleTracking",
+   "file": "Core/SDCOutBattleTracking.cs"
+  },
+  {
+   "class": "SDCBaseWindow",
+   "file": "Growth/SDCBaseWindow.cs"
+  },
+  {
+   "class": "SDCGrowthUIHelper",
+   "file": "Growth/SDCGrowthUIHelper.cs"
+  },
+  {
+   "class": "SDCMadeWindow",
+   "file": "Growth/SDCMadeWindow.cs"
+  },
+  {
+   "class": "SDCModUpgradeWindow",
+   "file": "Growth/SDCModUpgradeWindow.cs"
+  },
+  {
+   "class": "SDCUpgradePreviewWindow",
+   "file": "Growth/SDCUpgradePreviewWindow.cs"
+  },
+  {
+   "class": "SDCMainView",
+   "file": "MainView/SDCMainView.cs"
+  },
+  {
+   "class": "SDCMatchWindow",
+   "file": "Match/SDCMatchWindow.cs"
+  },
+  {
+   "class": "UISDCHistorySeasonWindow",
+   "file": "Season/UISDCHistorySeasonWindow.cs"
+  },
+  {
+   "class": "UISDCMainWindow",
+   "file": "Season/UISDCMainWindow.cs"
+  },
+  {
+   "class": "UISDCSeasonRank",
+   "file": "Season/UISDCSeasonRank.cs"
+  },
+  {
+   "class": "UISDCSeasonReward",
+   "file": "Season/UISDCSeasonReward.cs"
+  },
+  {
+   "class": "SDCCollectorTaskConfigHelper",
+   "file": "Task/SDCCollectorTaskConfigHelper.cs"
+  },
+  {
+   "class": "SDCCollectWindowView",
+   "file": "Task/SDCCollectWindowView.cs"
+  },
+  {
+   "class": "SDCStageTaskWindowView",
+   "file": "Task/SDCStageTaskWindowView.cs"
+  },
+  {
+   "class": "SDCTaskAwardWindowView",
+   "file": "Task/SDCTaskAwardWindowView.cs"
+  },
+  {
+   "class": "SDCTaskWindowView",
+   "file": "Task/SDCTaskView.cs"
+  },
+  {
+   "class": "CommonActivateItemWindow",
+   "file": "UI/Common/CommonActivateItemWindow.cs"
+  },
+  {
+   "class": "SDCItemTips",
+   "file": "UI/Common/SDCItemTips.cs"
+  },
+  {
+   "class": "SDCPreWarShopWindow",
+   "file": "UI/PreWar/SDCPreWarShopWindow.cs"
+  },
+  {
+   "class": "SDCPreWarWindow",
+   "file": "UI/PreWar/SDCPreWarWindow.cs"
+  },
+  {
+   "class": "SDCPreWarWindow",
+   "file": "UI/PreWar/SDCPreWarWindow_Drag.cs"
+  },
+  {
+   "class": "UIAwakeTipsPanelArgs",
+   "file": "UI/PreWar/UIAwakeTipsPanel.cs"
+  },
+  {
+   "class": "UICommonSuperTalentPopSnapshot",
+   "file": "UI/PreWar/UICommonSuperTalentPop.cs"
+  },
+  {
+   "class": "UISDCChangeNameWindowArgs",
+   "file": "UI/PreWar/UISDCChangeNameWindow.cs"
+  },
+  {
+   "class": "UISDCPreAssemblyWindowArgs",
+   "file": "UI/PreWar/UISDCPreAssemblyWindow.cs"
+  },
+  {
+   "class": "UISDCPresetWindowArgs",
+   "file": "UI/PreWar/UISDCPresetWindow.cs"
+  },
+  {
+   "class": "UISDCSavePlanWindowArgs",
+   "file": "UI/PreWar/UISDCSavePlanWindow.cs"
+  },
+  {
+   "class": "UISDCStoreWindowArgs",
+   "file": "UI/PreWar/UISDCStoreWindow.cs"
+  },
+  {
+   "class": "UISDCSuitWindowArgs",
+   "file": "UI/PreWar/UISDCSuitWindow.cs"
+  }
+ ]
+}

@@ -1,6 +1,6 @@
 [project]
 name = "ok-jump"
-version = "1.8.0"
+version = "1.10.1"
 description = "漫画群星：大集结自动化工具(基于 ok-script 2.x)"
 readme = "README.md"
 requires-python = ">=3.12"

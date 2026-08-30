@@ -515,9 +515,11 @@ class TestTutorialDetector:
         detector = TutorialDetector(task)
         detector.start_phase1_end_detection(timeout=2.0)
         
-        # 等待检测完成
-        time.sleep(1.0)
-        
+        # 等待检测完成(条件轮询,避免固定 sleep 的时序竞态)
+        deadline = time.time() + 5.0
+        while not detector.is_phase1_end_detected() and time.time() < deadline:
+            time.sleep(0.05)
+
         # 应该检测到了
         assert detector.is_phase1_end_detected() is True
         

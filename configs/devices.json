@@ -1,7 +1,8 @@
 {
     "preferred": "unity",
     "pc_full_path": "D:\\Python-wuwa\\Internal_1\\漫画群星：大集结.exe",
-    "capture": "windows",
+    "capture": "WGC",
     "selected_exe": "",
-    "selected_hwnd": 0
+    "selected_hwnd": 0,
+    "interaction": "PyDirect"
 }

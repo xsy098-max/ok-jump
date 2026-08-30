@@ -6,7 +6,7 @@
     "Exit App when Game Exits": false,
     "Use DirectML": "Yes",
     "Trigger Interval": 1,
-    "Start/Stop": "F9",
+    "Start/Stop": "None",
     "Kill Launcher After Start": true,
     "Launch with DX11": false
 }

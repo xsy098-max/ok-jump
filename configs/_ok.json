@@ -1,7 +1,9 @@
 {
-    "window_x": 498,
-    "window_y": 227,
-    "window_width": 1108,
-    "window_height": 689,
-    "window_maximized": false
+    "window_x": 387,
+    "window_y": 215,
+    "window_width": 1141,
+    "window_height": 737,
+    "window_maximized": false,
+    "navigation_expanded": true,
+    "use_overlay": false
 }

@@ -9,9 +9,12 @@ import json
 import socket
 import threading
 import time
-import logging
 
-logger = logging.getLogger(__name__)
+from ok import Logger
+
+# 必须用 ok-script 的 Logger:标准 logging.getLogger 的记录不会进入
+# ok 层级的文件 handler,连接失败的异常详情会完全丢失
+logger = Logger.get_logger(__name__)
 
 # ESkillButton 映射（与 Unity 端一致）
 SKILL_BUTTON_ATTACK = 100
@@ -317,6 +320,226 @@ class UnityConnection:
             return json.loads(resp.get('message', '{}'))
         except (json.JSONDecodeError, TypeError):
             return empty
+
+    # ==================== UI 自动化（战备房间等界面测试） ====================
+
+    def screenshot(self, save_dir, name, timeout=12):
+        """
+        截取 Game View 画面保存为 PNG（供 AI 视觉复核与报告留证）
+
+        Returns:
+            str|None: 成功返回保存路径, 失败返回 None
+        """
+        resp = self.send_command('automation_screenshot',
+                                 {'dir': save_dir, 'name': name},
+                                 timeout=timeout)
+        if resp.get('status') != 'ok':
+            return None
+        try:
+            data = json.loads(resp.get('message', '{}'))
+            return data.get('path') if data.get('success') else None
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+    def sdc_fill_teammate(self, on=None, timeout=10):
+        """
+        读取/写回搜打撤"补齐队友"状态（官方接口反射，队长权限）
+
+        Args:
+            on: None=只读；True/False=写回目标状态并回读
+
+        Returns:
+            dict: {'success':bool, 'on':bool, 'inRoom':bool} 或 error 响应
+        """
+        payload = {'on': -1 if on is None else (1 if on else 0)}
+        resp = self.send_command('automation_sdc_fill_teammate', payload,
+                                 timeout=timeout)
+        if resp.get('status') != 'ok':
+            return resp
+        try:
+            return json.loads(resp.get('message', '{}'))
+        except (json.JSONDecodeError, TypeError):
+            return resp
+
+    def go_back(self):
+        """
+        触发游戏返回栈（等价玩家按系统返回键），可关闭全屏窗口
+
+        Returns:
+            dict: 原始响应，ok 且 success=true 表示已执行返回
+        """
+        return self.send_command('automation_go_back')
+
+    def find_ui(self, path=None, name_contains=None, max_results=None):
+        """
+        查找 UI 对象（GameObject.Find + 全层级扫描，含未激活节点）
+
+        Args:
+            path: 精确路径（可选）
+            name_contains: 名称包含的关键字（可选）
+            max_results: 最多返回条数
+
+        Returns:
+            dict: {'success': bool, 'count': int, 'items': [...]}，
+                  item 含 name/path/activeSelf/activeInHierarchy/hasButton/hasToggle/interactable 等
+        """
+        payload = {}
+        if path:
+            payload['path'] = path
+        if name_contains:
+            payload['nameContains'] = name_contains
+        if max_results:
+            payload['maxResults'] = max_results
+        resp = self.send_command('automation_find_ui', payload)
+        if resp.get('status') != 'ok':
+            return {'success': False, 'count': 0, 'items': []}
+        try:
+            data = json.loads(resp.get('message', '{}'))
+            return {
+                'success': bool(data.get('success')),
+                'count': int(data.get('count', 0)),
+                'items': data.get('items', []),
+            }
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return {'success': False, 'count': 0, 'items': []}
+
+    def click_ui(self, path=None, name_contains=None):
+        """
+        点击 UI 按钮（Button.onClick.Invoke，回退 ExecuteEvents.pointerClick）
+
+        Args:
+            path: 精确路径（可选）
+            name_contains: 名称包含的关键字（可选）
+
+        Returns:
+            dict: 原始响应，ok 时 message 含 {success, clickedBy, target}
+        """
+        payload = {}
+        if path:
+            payload['path'] = path
+        if name_contains:
+            payload['nameContains'] = name_contains
+        return self.send_command('automation_click_ui', payload)
+
+    def set_ui_toggle(self, is_on, path=None, name_contains=None):
+        """
+        设置 Toggle 开关状态
+
+        Args:
+            is_on: 目标状态
+            path: 精确路径（可选）
+            name_contains: 名称包含的关键字（可选）
+
+        Returns:
+            dict: 原始响应
+        """
+        payload = {'isOn': bool(is_on)}
+        if path:
+            payload['path'] = path
+        if name_contains:
+            payload['nameContains'] = name_contains
+        return self.send_command('automation_set_ui_toggle', payload)
+
+    def set_ui_input(self, text, path=None, name_contains=None):
+        """
+        设置 InputField 文本
+
+        Args:
+            text: 目标文本
+            path: 精确路径（可选）
+            name_contains: 名称包含的关键字（可选）
+
+        Returns:
+            dict: 原始响应
+        """
+        payload = {'text': text}
+        if path:
+            payload['path'] = path
+        if name_contains:
+            payload['nameContains'] = name_contains
+        return self.send_command('automation_set_ui_input', payload)
+
+    def get_ui_info(self, path=None, name_contains=None, max_results=None):
+        """
+        读取 UI 节点的文本/颜色/Toggle 状态
+
+        Args:
+            path: 精确路径（可选，单节点）
+            name_contains: 名称包含的关键字（可选）
+            max_results: 最多返回条数
+
+        Returns:
+            dict: {'success': bool, 'count': int, 'items': [...]}，
+                  item 在 find_ui 基础上附加 text/color([r,g,b,a] 0~255)/isOn
+        """
+        payload = {}
+        if path:
+            payload['path'] = path
+        if name_contains:
+            payload['nameContains'] = name_contains
+        if max_results:
+            payload['maxResults'] = max_results
+        resp = self.send_command('automation_get_ui_info', payload)
+        if resp.get('status') != 'ok':
+            return {'success': False, 'count': 0, 'items': []}
+        try:
+            data = json.loads(resp.get('message', '{}'))
+            return {
+                'success': bool(data.get('success')),
+                'count': int(data.get('count', 0)),
+                'items': data.get('items', []),
+            }
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return {'success': False, 'count': 0, 'items': []}
+
+    def reveal_gm_panel(self, show=True):
+        """
+        显示/收起 GM 面板（操作 GMModel 数据绑定层）
+
+        GMSwitch 等节点的显隐由 Model 绑定驱动，外部 SetActive 会被
+        绑定复位；本命令等价于玩家按 F9 并点击"开启指令"（或反向收起）。
+
+        Returns:
+            dict: 原始响应，ok 且 success=true 表示已生效
+        """
+        return self.send_command('automation_reveal_gm_panel', {'show': bool(show)})
+
+    def set_ui_active(self, is_active, path=None, name_contains=None):
+        """
+        直接设置 UI 节点激活状态(SetActive)。
+
+        用于替代人工按键呼出类入口(如 GM 面板的 F9 →"开启指令")，
+        全自动化流程中不需要真实键盘输入。
+
+        Returns:
+            dict: 原始响应，ok 时 message 含 {success,name,previous,active}
+        """
+        payload = {'isActive': bool(is_active)}
+        if path:
+            payload['path'] = path
+        if name_contains:
+            payload['nameContains'] = name_contains
+        return self.send_command('automation_set_ui_active', payload)
+
+    def get_battle_state(self, include_errors=False, clear_errors=False):
+        """
+        获取战斗状态快照（含运行时错误环形缓冲区）
+
+        Args:
+            include_errors: 返回期间捕获的运行时错误
+            clear_errors: 读取后清空错误缓冲区
+
+        Returns:
+            dict: 状态快照，失败时返回 {}
+        """
+        payload = {'includeErrors': bool(include_errors), 'clearErrors': bool(clear_errors)}
+        resp = self.send_command('automation_get_battle_state', payload)
+        if resp.get('status') != 'ok':
+            return {}
+        try:
+            return json.loads(resp.get('message', '{}'))
+        except (json.JSONDecodeError, TypeError):
+            return {}
 
     # ==================== 自动战斗（游戏内置 AI） ====================
 

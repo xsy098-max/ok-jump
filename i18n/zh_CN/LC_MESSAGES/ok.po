@@ -3,7 +3,7 @@
 # 规则: 任务 self.name 为英文类名,msgid 用原名;新增任务须在此登记
 msgid ""
 msgstr ""
-"Project-Id-Version: ok-jump 1.8.0\n"
+"Project-Id-Version: ok-jump 1.10.1\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -48,3 +48,7 @@ msgstr "Unity自动战斗"
 #: src/task/MainWindowTask.py
 msgid "MainWindowTask"
 msgstr "主窗口"
+
+#: src/task/BattleRoomTestTask.py
+msgid "BattleRoomTestTask"
+msgstr "战备房间测试"

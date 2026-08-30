@@ -73,6 +73,35 @@ def _get_unity_connection():
     return conn
 
 
+# Unity 不可达告警节流:do_refresh 每轮末尾都会调 do_start,避免刷屏/弹窗轰炸
+UNITY_ALERT_INTERVAL = 60.0
+_unity_unreachable_at = 0.0
+
+# unity 虚拟设备上一轮是否在设备列表中(单元素 list 以便 patched_do_refresh 内改写)
+_unity_device_in_list = [None]
+
+
+def _notify_unity_unreachable(reason):
+    """Unity 不可达时告警(60s 节流),保持 Unity 模式等待恢复。
+
+    不回退标准模式:回退路径会触发框架 set_preferred_device 把
+    preferred 永久改写成首个可用设备(如 MuMu 模拟器),之后即使
+    Unity 端口恢复、重启 GUI 也不会再尝试连接。
+    """
+    global _unity_unreachable_at
+    now = time.monotonic()
+    if now - _unity_unreachable_at < UNITY_ALERT_INTERVAL:
+        logger.debug(f'Unity 不可达({reason}),告警节流中')
+        return
+    _unity_unreachable_at = now
+    logger.error(f'Unity 连接失败({reason}),保持 Unity 模式等待恢复')
+    try:
+        from ok.core.notifications import alert_error
+        alert_error('Unity 连接失败,请确认 Unity Editor 已启动并处于运行模式', tray=True)
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # 战斗触发器自动切换
 # ---------------------------------------------------------------------------
@@ -449,6 +478,8 @@ def patch_device_manager_for_unity():
     - do_refresh 后探测 Unity TCP 端口,可达则注入 "unity" 虚拟设备
     - do_start 时若选择 unity 设备,建立 UnityConnection 并存入
       og.my_app._unity_connection,输入直接走 TCP 命令而非 Interaction
+    - Unity 不可达时保持 Unity 模式(节流告警 + 等待刷新循环重连),
+      不回退标准模式——回退会永久改写 preferred 设备选择
     """
     from ok.device.DeviceManager import DeviceManager
 
@@ -498,6 +529,18 @@ def patch_device_manager_for_unity():
         except Exception as e:
             logger.debug(f'设备刷新时自动切换触发器异常: {e}')
 
+        # original_do_refresh 内部发出的 adb_devices 信号发生在 unity 注入之前,
+        # UI 渲染的快照不含 Unity 行(是否可见取决于线程竞态);
+        # 在注入完成后按状态变化补发一次,保证下拉列表稳定显示/移除 Unity Editor
+        try:
+            present = 'unity' in self.device_dict
+            if present != _unity_device_in_list[0]:
+                _unity_device_in_list[0] = present
+                from ok.core.events import communicate
+                communicate.adb_devices.emit(True)
+        except Exception as e:
+            logger.debug(f'Unity 设备信号补发异常: {e}')
+
     patched_do_refresh.__ok_jump_patch__ = True
     DeviceManager.do_refresh = patched_do_refresh
 
@@ -507,12 +550,26 @@ def patch_device_manager_for_unity():
         # 检查是否选择了 Unity 设备
         preferred = self.config.get('preferred', '')
         if preferred and isinstance(preferred, str) and 'unity' in preferred:
+            # do_refresh 每轮末尾都会调用 do_start,这就是天然的重试循环:
+            # 端口不可达时快速返回,等下一轮刷新自动重连,不回退标准模式
+            if not _is_unity_port_open():
+                _notify_unity_unreachable('TCP 端口不可达')
+                return
+
             logger.info('Unity 工程连接模式启动')
 
-            # 初始化 UnityConnection
+            # 初始化 UnityConnection;端口刚恢复的窗口期(编辑器域重载)
+            # 连接仍可能被拒,短重试覆盖
             from src.utils.UnityConnection import UnityConnection
             conn = UnityConnection()
-            if conn.connect():
+            connected = conn.connect()
+            for _ in range(2):
+                if connected:
+                    break
+                time.sleep(2)
+                connected = conn.connect()
+
+            if connected:
                 if og and hasattr(og, 'my_app') and og.my_app:
                     og.my_app._unity_connection = conn
                     logger.info('Unity 连接已建立并存储到全局对象')
@@ -520,15 +577,15 @@ def patch_device_manager_for_unity():
                     logger.warning('全局对象未就绪,Unity 连接未存储')
 
                 logger.info('Unity 工程连接已就绪(纯组件模式)')
-                return
             else:
-                logger.error('Unity 连接失败,回退到标准模式')
-                _alert_unity_disconnected(type('T', (), {'name': 'Unity 连接'})())
+                _notify_unity_unreachable('连接重试均失败')
+            return
 
-        # 非 Unity 模式或回退,走原始逻辑
-        original_do_start(self, notify)
+        # 非 Unity 模式,走原始逻辑
+        patched_do_start.__ok_jump_orig__(self, notify)
 
     patched_do_start.__ok_jump_patch__ = True
+    patched_do_start.__ok_jump_orig__ = original_do_start
     DeviceManager.do_start = patched_do_start
     logger.info('DeviceManager patched: Unity 工程连接支持')
 
